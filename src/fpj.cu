@@ -219,20 +219,34 @@ void mangoCudaFpj(float *img, int batchsize, float offcenter, float sid, float s
                         offcenter);
   float *beta = nullptr;
   Fpj_InitializeBeta_Agent(beta, views, startAngle, totalScanAngle);
-  float *sgm_large = nullptr;
+  // float *sgm_large = nullptr;
   // Fpj_MallocManaged_Agent(sgm_large, detElementCount * oversample * views * sizeof(float));
-  cudaMalloc((void **)&sgm_large, detElementCount * oversample * views * sizeof(float));
+  // cudaMalloc((void **)&sgm_large, detElementCount * oversample * views * sizeof(float));
+  // cudaCheckError();
   cudaCheckError();
 
+  float *img_device = nullptr;
+  cudaMalloc((void **)&img_device, imgDim * imgDim * sizeof(float));
+  cudaCheckError();
+  cudaMemcpy(img_device, img, imgDim * imgDim * sizeof(float), cudaMemcpyHostToDevice);
+  cudaCheckError();
+
+  float *sgm_device = nullptr;
+  cudaMalloc((void **)&sgm_device, detElementCount * oversample * views * sizeof(float));
+  cudaCheckError();
   printf("FPJ inside batch\n");
-  ForwardProjectionBilinear_Agent(img, batchsize, sgm_large, sidArray, sddArray, offcenterArray, u,
-                                  beta, detElementCount, oversample, views, imgDim, imgPixelSize,
-                                  fpjStepSize);
+  ForwardProjectionBilinear_Agent(img_device, batchsize, sgm_device, sidArray, sddArray,
+                                  offcenterArray, u, beta, detElementCount, oversample, views,
+                                  imgDim, imgPixelSize, fpjStepSize);
   cudaCheckError();
 
-  BinSinogram(sgm_large, batchsize, sgm, detElementCount, views, oversample);
-  cudaCheckError();
+  // BinSinogram(sgm_large, batchsize, sgm, detElementCount, views, oversample);
+  // cudaCheckError();
 
-  cudaFree(sgm_large);
+  cudaMemcpy(sgm, sgm_device, detElementCount * views * sizeof(float), cudaMemcpyDeviceToHost);
+
   cudaDeviceSynchronize();
+
+  cudaFree(img_device);
+  cudaFree(sgm_device);
 }
