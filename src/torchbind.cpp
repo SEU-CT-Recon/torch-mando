@@ -17,10 +17,9 @@ torch::Tensor radon_forward(torch::Tensor x, float offcenter, float sid, float s
 
   auto dtype = x.dtype();
   const int batch_size = x.size(0);
-  const int device = x.device().index();
 
-  auto y = torch::empty({batch_size, rays_cfg.n_angles, rays_cfg.det_count},
-                        torch::TensorOptions().dtype(dtype).device(x.device()));
+  auto options = torch::TensorOptions().dtype(dtype).device(x.device());
+  auto y = torch::empty({batch_size, views, detElementCount}, options);
 
   mangoCudaFpj(x, batch_size, offcenter, sid, sdd, views, detElementCount, oversample, startAngle,
                totalScanAngle, imgDim, imgPixelSize, fpjStepSize, y);
@@ -37,10 +36,9 @@ torch::Tensor radon_backward(torch::Tensor x, int sgmHeight, int sgmWidth, int v
 
   auto dtype = x.dtype();
   const int batch_size = x.size(0);
-  const int device = x.device().index();
 
-  auto y = torch::empty({batch_size, rays_cfg.height, rays_cfg.width},
-                        torch::TensorOptions().dtype(dtype).device(x.device()));
+  auto options = torch::TensorOptions().dtype(dtype).device(x.device());
+  auto y = torch::empty({batch_size, sgmHeight, sgmWidth}, options);
 
   mangoCudaFbp(x, batch_size, sgmHeight, sgmWidth, views, reconKernelName, reconKernelParam,
                totalScanAngle, detElementSize, detOffCenter, sid, sdd, imgDim, imgPixelSize, imgRot,

@@ -201,13 +201,10 @@ __global__ void BackprojectPixelDriven_device(float *sgm, int batch, float *img,
 
     float x = (col - (M - 1) / 2.0f) * dx + xc;
     float y = ((M - 1) / 2.0f - row) * dx + yc;
-    float U, u0, v0;
+    float U, u0;
     float mag_factor;
     float w;
     int k;
-
-    float w_z;        // weight for cbct
-    int k_z;          // index for cbct
     float delta_beta; // delta_beta for the integral calculation (nonuniform scan angle)
 
     // temporary local variable to speed up

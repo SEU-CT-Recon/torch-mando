@@ -8,7 +8,7 @@ with open("README.md", "r") as fh:
 
 cuda_home = os.getenv("CUDA_HOME", "/usr/local/cuda")
 print(f"Using CUDA_HOME={cuda_home}")
-buildLib((60, 61, 70, 75, 80, 86), nvcc='/usr/local/cuda/bin/nvcc')
+buildLib((61,), nvcc='/usr/local/cuda/bin/nvcc')
 
 setup(
     name='torch_mango',

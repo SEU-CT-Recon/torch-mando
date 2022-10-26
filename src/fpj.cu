@@ -81,7 +81,6 @@ __global__ void ForwardProjectionBilinear_device(float *img, int batch, float *s
     // current source position
     float xs = sid * cosf(beta[row]);
     float ys = sid * sinf(beta[row]);
-    float zs = 0;
 
     // calculate offcenter bias
     float offcenter_bias = offcenter_array[row] - offcenter_array[0];
@@ -91,7 +90,6 @@ __global__ void ForwardProjectionBilinear_device(float *img, int batch, float *s
         -(sdd - sid) * cosf(beta[row]) + (u[col] + offcenter_bias) * cosf(beta[row] - PI / 2.0f);
     float yd =
         -(sdd - sid) * sinf(beta[row]) + (u[col] + offcenter_bias) * sinf(beta[row] - PI / 2.0f);
-    float zd = 0;
 
     // step point region
     float L_min = sid - sqrt(2 * D * D + D_z * D_z);
@@ -101,18 +99,15 @@ __global__ void ForwardProjectionBilinear_device(float *img, int batch, float *s
     float sed = sqrtf((xs - xd) * (xs - xd) + (ys - yd) * (ys - yd)); // for fan beam case
 
     // the point position
-    float x, y, z;
+    float x, y;
     // the point index
-    int kx, ky, kz;
+    int kx, ky;
     // weighting factor for linear interpolation
-    float wx, wy, wz;
+    float wx, wy;
 
     // the most upper left image pixel position
     float x0 = -D + dx / 2.0f;
     float y0 = D - dx / 2.0f;
-    float z0 = 0;
-
-    float z_dis_per_view = 0;
 
     sgm[batch * N * V + row * N + col] = 0;
 
@@ -210,16 +205,17 @@ void mangoCudaFpj(float *img, int batchsize, float offcenter, float sid, float s
                   int detElementCount, int oversample, float startAngle, float totalScanAngle,
                   int imgDim, float imgPixelSize, float fpjStepSize, float *sgm) {
   float *sddArray = nullptr;
-  InitDistance(sddArray, sdd, views);
+  InitializeDistance_Agent(sddArray, sdd, views);
   float *sidArray = nullptr;
-  InitDistance(sidArray, sid, views);
+  InitializeDistance_Agent(sidArray, sid, views);
   float *offcenterArray = nullptr;
-  InitDistance(offcenterArray, offcenter, views);
+  InitializeDistance_Agent(offcenterArray, offcenter, views);
 
   float *u = nullptr;
-  InitU(u, detElementCount * oversample, detElementCount / (float)oversample, offcenter);
+  InitializeU_Agent(u, detElementCount * oversample, detElementCount / (float)oversample,
+                    offcenter);
   float *beta = nullptr;
-  InitBeta(beta, views, startAngle, totalScanAngle);
+  InitializeBeta_Agent(beta, views, startAngle, totalScanAngle);
 
   // MallocManaged_Agent(sgm, detElementCount * views * sizeof(float));
   float *sgm_large = nullptr;
