@@ -1,0 +1,16 @@
+{
+  "C_Cpp.default.includePath": [
+    "${workspaceRoot}/include",
+    "D:/MedRecon/libtorch-win-shared-with-deps-debug-1.12.1+cu116/libtorch/include",
+    "D:/MedRecon/libtorch-win-shared-with-deps-debug-1.12.1+cu116/libtorch/include/torch/csrc/api/include",
+  ],
+  "files.associations": {
+    "*.wxml": "html",
+    "*.wxss": "css",
+    "*.cu": "cuda-cpp",
+    "*.cuh": "cpp",
+    "cmath": "cpp",
+    "random": "cpp",
+    "valarray": "cpp"
+  }
+}
