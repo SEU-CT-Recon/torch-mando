@@ -18,9 +18,9 @@ def run_compilation(files, f):
             print(f"\u001b[32mSkipping {src}\u001b[0m")
 
 
-def buildLib(ccs, nvcc, cxx="g++", verbose=False):
-    include_dirs = ["./include"]
-    cu_files = [('src/fbp.cu', 'objs/fbp.o'), ('src/fpj.cu', 'objs/fpj.o')]
+def buildLib(ccs, nvcc, cxx="g++", verbose=True):
+    include_dirs = ["include"]
+    cu_files = [('src/fpj.cu', 'objs/fpj.o'), ('src/fbp.cu', 'objs/fbp.o')]
     all_objects = [y for _, y in cu_files]
     include_flags = [f"-I{x}" for x in include_dirs]
 
@@ -34,11 +34,9 @@ def buildLib(ccs, nvcc, cxx="g++", verbose=False):
 
     nvcc_flags = " ".join(nvcc_flags)
 
-    # create output directory
-    if not os.path.exists("objs/cuda"):
-        os.makedirs("objs/cuda")
-
     # compile
+    if not os.path.exists('objs'):
+        os.makedirs('objs')
     run_compilation(cu_files, lambda src, dst: f"{nvcc} {nvcc_flags} -c {src} -o {dst}")
 
     run(f"ar rc objs/libmango.a {' '.join(all_objects)}")

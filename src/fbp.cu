@@ -1,21 +1,23 @@
 #include "fbp.h"
 #include "utils.h"
 
-__global__ void InitDistance(float *distance_array, const float distance, const int V) {
+#include <stdio.h>
+
+__global__ void Fbp_InitDistance(float *distance_array, const float distance, const int V) {
   int tid = threadIdx.x + blockDim.x * blockIdx.x;
   if (tid < V) {
     distance_array[tid] = distance;
   }
 }
 
-__global__ void InitU(float *u, const int N, const float du, const float offcenter) {
+__global__ void Fbp_InitU(float *u, const int N, const float du, const float offcenter) {
   int tid = threadIdx.x + blockDim.x * blockIdx.x;
   if (tid < N) {
     u[tid] = (tid - (N - 1) / 2.0f) * du + offcenter;
   }
 }
 
-__global__ void InitBeta(float *beta, const int V, const float rotation,
+__global__ void Fbp_InitBeta(float *beta, const int V, const float rotation,
                          const float totalScanAngle) {
   int tid = threadIdx.x + blockDim.x * blockIdx.x;
   if (tid < V) {
@@ -252,55 +254,55 @@ __global__ void BackprojectPixelDriven_device(float *sgm, int batch, float *img,
   }
 }
 
-void InitializeDistance_Agent(float *&distance_array, const float distance, const int V) {
+void Fbp_InitializeDistance_Agent(float *&distance_array, const float distance, const int V) {
   if (distance_array != nullptr)
     cudaFree(distance_array);
 
   cudaMalloc((void **)&distance_array, V * sizeof(float));
-  InitDistance<<<(V + 511) / 512, 512>>>(distance_array, distance, V);
+  Fbp_InitDistance<<<(V + 511) / 512, 512>>>(distance_array, distance, V);
 }
 
-void InitializeU_Agent(float *&u, const int N, const float du, const float offcenter) {
+void Fbp_InitializeU_Agent(float *&u, const int N, const float du, const float offcenter) {
   if (u != nullptr)
     cudaFree(u);
 
   cudaMalloc((void **)&u, N * sizeof(float));
-  InitU<<<(N + 511) / 512, 512>>>(u, N, du, offcenter);
+  Fbp_InitU<<<(N + 511) / 512, 512>>>(u, N, du, offcenter);
 }
 
-void InitializeBeta_Agent(float *&beta, const int V, const float rotation,
+void Fbp_InitializeBeta_Agent(float *&beta, const int V, const float rotation,
                           const float totalScanAngle) {
   if (beta != nullptr)
     cudaFree(beta);
 
   cudaMalloc((void **)&beta, V * sizeof(float));
-  InitBeta<<<(V + 511) / 512, 512>>>(beta, V, rotation, totalScanAngle);
+  Fbp_InitBeta<<<(V + 511) / 512, 512>>>(beta, V, rotation, totalScanAngle);
 }
 
-void InitializeReconKernel_Agent(float *&reconKernel, const int N, const float du,
-                                 const std::string &kernelName, float kernelParam) {
+void Fbp_InitializeReconKernel_Agent(float *&reconKernel, const int N, const float du, int kernelEnum,
+                                 float kernelParam) {
   if (reconKernel != nullptr)
     cudaFree(reconKernel);
 
   cudaMalloc((void **)&reconKernel, (2 * N - 1) * sizeof(float));
 
-  if (kernelName == KERNEL_RAMP) {
+  if (kernelEnum == KERNEL_RAMP) {
     InitReconKernel_Hamming<<<(2 * N - 1 + 511) / 512, 512>>>(reconKernel, N, du, 1.0f);
-  } else if (kernelName == KERNEL_HAMMING) {
+  } else if (kernelEnum == KERNEL_HAMMING) {
     InitReconKernel_Hamming<<<(2 * N - 1 + 511) / 512, 512>>>(reconKernel, N, du, kernelParam);
-  } else if (kernelName == KERNEL_GAUSSIAN_RAMP) {
+  } else if (kernelEnum == KERNEL_GAUSSIAN_RAMP) {
     InitReconKernel_GaussianApodized<<<(2 * N - 1 + 511) / 512, 512>>>(reconKernel, N, du,
                                                                        kernelParam);
-  } else if (kernelName == KERNEL_NONE) {
+  } else if (kernelEnum == KERNEL_NONE) {
     // Do not need to do anything
   }
 }
 
-void MallocManaged_Agent(float *&p, const int size) { cudaMallocManaged((void **)&p, size); }
+void Fbp_MallocManaged_Agent(float *&p, const int size) { cudaMallocManaged((void **)&p, size); }
 
 void FilterSinogram_Agent(float *sgm, int batch, float *sgm_flt, float *reconKernel, float *u,
                           int sgmWidth, int sgmHeight, int views, float totalScanAngle,
-                          bool shortScan, float *beta, float *sdd_array, std::string kernelName,
+                          bool shortScan, float *beta, float *sdd_array, int kernelEnum,
                           float detEltSize, float *offcenter_array) {
   // Step 1: weight the sinogram
   dim3 grid((sgmWidth + 15) / 16, (sgmHeight + 15) / 16);
@@ -313,7 +315,7 @@ void FilterSinogram_Agent(float *sgm, int batch, float *sgm_flt, float *reconKer
   cudaDeviceSynchronize();
 
   // Step 2: convolve the sinogram
-  if (kernelName == KERNEL_GAUSSIAN_RAMP) {
+  if (kernelEnum == KERNEL_GAUSSIAN_RAMP) {
     // if Guassian aposied kernel is used, the sinogram need to be filtered twice
     // first by the ramp filter, then by the gaussian filter
     float du = detEltSize;
@@ -337,7 +339,7 @@ void FilterSinogram_Agent(float *sgm, int batch, float *sgm_flt, float *reconKer
 
     cudaFree(reconKernel_ramp);
     cudaFree(sgm_flt_ramp);
-  } else if (kernelName == KERNEL_NONE) {
+  } else if (kernelEnum == KERNEL_NONE) {
     CopySinogram_device<<<grid, block>>>(sgm_flt, batch, sgm, sgmWidth, sgmHeight, views);
     cudaDeviceSynchronize();
   } else {
@@ -360,7 +362,7 @@ void BackprojectPixelDriven_Agent(float *sgm_flt, int batch, float *img, float *
   cudaDeviceSynchronize();
 }
 
-void FreeMemory_Agent(float *&p) {
+void Fbp_FreeMemory_Agent(float *&p) {
   cudaFree(p);
   p = nullptr;
 }
@@ -369,36 +371,49 @@ void FreeMemory_Agent(float *&p) {
  * This is the very main.
  */
 void mangoCudaFbp(float *sgm, int batchsize, int sgmHeight, int sgmWidth, int views,
-                  std::string reconKernelName, float reconKernelParam, float totalScanAngle,
+                  int reconKernelEnum, float reconKernelParam, float totalScanAngle,
                   float detElementSize, float detOffcenter, float sid, float sdd, int imgDim,
                   float imgPixelSize, float imgRot, float imgXCenter, float imgYCenter,
                   float *img) {
   // Initialize parameters.
   float *sddArray = nullptr;
-  InitializeDistance_Agent(sddArray, sdd, views);
+  Fbp_InitializeDistance_Agent(sddArray, sdd, views);
   float *sidArray = nullptr;
-  InitializeDistance_Agent(sidArray, sid, views);
+  Fbp_InitializeDistance_Agent(sidArray, sid, views);
   float *offcenterArray = nullptr;
-  InitializeDistance_Agent(offcenterArray, detOffcenter, views);
+  Fbp_InitializeDistance_Agent(offcenterArray, detOffcenter, views);
   float *u = nullptr;
-  InitializeU_Agent(u, sgmWidth, detElementSize, detOffcenter);
+  Fbp_InitializeU_Agent(u, sgmWidth, detElementSize, detOffcenter);
   float *beta = nullptr;
-  InitializeBeta_Agent(beta, views, imgRot, totalScanAngle);
+  Fbp_InitializeBeta_Agent(beta, views, imgRot, totalScanAngle);
   bool shortScan = 360.0f - abs(totalScanAngle) < 0.01f;
   float *reconKernel = nullptr;
-  InitializeReconKernel_Agent(reconKernel, sgmWidth, detElementSize, reconKernelName,
+  Fbp_InitializeReconKernel_Agent(reconKernel, sgmWidth, detElementSize, reconKernelEnum,
                               reconKernelParam);
 
   // Filter the sinogram.
   float *filteredSgm = nullptr;
-  MallocManaged_Agent(filteredSgm, sgmWidth * sgmWidth * sizeof(float));
+  // Fbp_MallocManaged_Agent(filteredSgm, sgmWidth * sgmWidth * sizeof(float));
+  if (filteredSgm != nullptr)
+    cudaFree(filteredSgm);
+
+  cudaMalloc((void **)&filteredSgm, sgmWidth * sgmWidth * sizeof(float));
+  cudaCheckError();
 
   for (int batch = 0; batch < batchsize; batch++) {
+    printf("FBP inside batch\n");
+
     FilterSinogram_Agent(sgm, batch, filteredSgm, reconKernel, u, sgmWidth, sgmHeight, views,
-                         totalScanAngle, shortScan, beta, sddArray, reconKernelName, detElementSize,
+                         totalScanAngle, shortScan, beta, sddArray, reconKernelEnum, detElementSize,
                          offcenterArray);
+    cudaCheckError();
+
     BackprojectPixelDriven_Agent(filteredSgm, batch, img, sddArray, sidArray, offcenterArray, u,
                                  beta, imgDim, shortScan, sgmWidth, views, imgPixelSize, imgXCenter,
                                  imgYCenter);
+    cudaCheckError();
   }
+
+  cudaFree(filteredSgm);
+  cudaDeviceSynchronize();
 }

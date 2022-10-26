@@ -1,3 +1,7 @@
+#pragma once
+#ifndef UTILS_H
+#define UTILS_H
+
 // Macro for checking cuda errors following a cuda launch or api call
 #define cudaCheckError()                                                                           \
   {                                                                                                \
@@ -10,7 +14,9 @@
 
 #define PI 3.1415926536f
 
-#define KERNEL_RAMP "Ramp"
-#define KERNEL_HAMMING "HammingFilter"
-#define KERNEL_GAUSSIAN_RAMP "GaussianApodizedRamp"
-#define KERNEL_NONE "None"
+#define KERNEL_NONE 0
+#define KERNEL_RAMP 1
+#define KERNEL_HAMMING 2
+#define KERNEL_GAUSSIAN_RAMP 4
+
+#endif

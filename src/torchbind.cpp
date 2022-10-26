@@ -3,6 +3,8 @@
 #include "fbp.h"
 #include "utils.h"
 
+#include <stdio.h>
+
 #define CHECK_CUDA(x) TORCH_CHECK(x.device().is_cuda(), #x " must be a CUDA tensor")
 #define CHECK_CONTIGUOUS(x) TORCH_CHECK(x.is_contiguous(), #x " must be contiguous")
 #define CHECK_INPUT(x)                                                                             \
@@ -21,14 +23,16 @@ torch::Tensor radon_forward(torch::Tensor x, float offcenter, float sid, float s
   auto options = torch::TensorOptions().dtype(dtype).device(x.device());
   auto y = torch::empty({batch_size, views, detElementCount}, options);
 
-  mangoCudaFpj(x, batch_size, offcenter, sid, sdd, views, detElementCount, oversample, startAngle,
-               totalScanAngle, imgDim, imgPixelSize, fpjStepSize, y);
+  printf("radon_forward batchsize: %d\n", batch_size);
+
+  mangoCudaFpj(x.data_ptr<float>(), batch_size, offcenter, sid, sdd, views, detElementCount, oversample, startAngle,
+               totalScanAngle, imgDim, imgPixelSize, fpjStepSize, y.data_ptr<float>());
 
   return y;
 }
 
 torch::Tensor radon_backward(torch::Tensor x, int sgmHeight, int sgmWidth, int views,
-                             std::string reconKernelName, float reconKernelParam,
+                             int reconKernelEnum, float reconKernelParam,
                              float totalScanAngle, float detElementSize, float detOffCenter,
                              float sid, float sdd, int imgDim, float imgPixelSize, float imgRot,
                              float imgXCenter, float imgYCenter) {
@@ -38,11 +42,13 @@ torch::Tensor radon_backward(torch::Tensor x, int sgmHeight, int sgmWidth, int v
   const int batch_size = x.size(0);
 
   auto options = torch::TensorOptions().dtype(dtype).device(x.device());
-  auto y = torch::empty({batch_size, sgmHeight, sgmWidth}, options);
+  auto y = torch::empty({batch_size, imgDim, imgDim}, options);
 
-  mangoCudaFbp(x, batch_size, sgmHeight, sgmWidth, views, reconKernelName, reconKernelParam,
+  printf("radon_backward batchsize: %d\n", batch_size);
+
+  mangoCudaFbp(x.data_ptr<float>(), batch_size, sgmHeight, sgmWidth, views, reconKernelEnum, reconKernelParam,
                totalScanAngle, detElementSize, detOffCenter, sid, sdd, imgDim, imgPixelSize, imgRot,
-               imgXCenter, imgYCenter, y);
+               imgXCenter, imgYCenter, y.data_ptr<float>());
 
   return y;
 }

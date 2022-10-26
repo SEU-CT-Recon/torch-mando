@@ -1,14 +1,17 @@
-__version__ = "0.0.1"
-
 import torch
 
 try:
     import torch_mango_cuda
+    print('[torch-mango / torch_mango_cuda] Using torch_mango_cuda backend.')
 except Exception as e:
-    print("Importing exception")
+    print("[torch-mango / torch_mango_cuda] Failed to import torch_mango_cuda!")
+    print(e)
+    exit(1)
 
 from .utils import normalize_shape
 
+__version__ = "0.0.1"
+__all__ = ['RadonFanbeam']
 
 class RadonForward(torch.autograd.Function):
     @staticmethod
