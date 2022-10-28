@@ -12,7 +12,7 @@
   CHECK_CONTIGUOUS(x)
 
 torch::Tensor radon_forward(torch::Tensor x, float offcenter, float sid, float sdd, int views,
-                            int detElementCount, int oversample, float startAngle,
+                            int detElementCount, float detEleSize, int oversample, float startAngle,
                             float totalScanAngle, int imgDim, float imgPixelSize,
                             float fpjStepSize) {
   CHECK_INPUT(x);
@@ -25,7 +25,7 @@ torch::Tensor radon_forward(torch::Tensor x, float offcenter, float sid, float s
 
   printf("radon_forward batchsize: %d\n", batch_size);
 
-  mangoCudaFpj(x.data_ptr<float>(), batch_size, offcenter, sid, sdd, views, detElementCount, oversample, startAngle,
+  mangoCudaFpj(x.data_ptr<float>(), batch_size, offcenter, sid, sdd, views, detElementCount, detEleSize, oversample, startAngle,
                totalScanAngle, imgDim, imgPixelSize, fpjStepSize, y.data_ptr<float>());
 
   return y;

@@ -90,7 +90,7 @@ class RadonFanbeam():
         """
         x = self._check_input(x, square=True)
 
-        return RadonForward.apply(x, self.detOffcenter, self.sid, self.sdd, self.views, self.sgmWidth, self.oversample,
+        return RadonForward.apply(x, self.detOffcenter, self.sid, self.sdd, self.views, self.sgmWidth, self.detEleSize, self.oversample,
                                   self.startAngle, self.totalAngle, self.imgDim, self.imgPixSize, self.fpjStepSize)
 
     @normalize_shape(2)

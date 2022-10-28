@@ -4,7 +4,7 @@ from crip.io import imwriteTiff
 from crip.preprocess import binning
 from torch_mango import RadonFanbeam
 
-device = torch.device('cuda:3')
+device = torch.device('cuda')
 img = np.load("shepplogan.npy")  # 512*512
 # img = binning(img, (16, 16))
 print(img.shape)  # 32*32
@@ -13,9 +13,9 @@ views = 360
 Ramp = 1
 totalAngle = 360
 detEleCount = 300
-detEleSize = 2
+detEleSize = 5
 imgPixelSize = 2
-radon = RadonFanbeam(100000, 100001, views, detEleSize, 1, 0, totalAngle, imgDim, imgPixelSize, 0.2, views, detEleCount,
+radon = RadonFanbeam(750, 800, views, detEleSize, 1, 0, totalAngle, imgDim, imgPixelSize, 0.2, views, detEleCount,
                      Ramp, 1, 0, 0, 0, 0)
 
 
@@ -24,9 +24,9 @@ def take(x):
 
 
 with torch.no_grad():
-    x = torch.FloatTensor(img)
+    x = torch.FloatTensor(np.array([img, img.T]))
     # B,H,W
-    x = x.unsqueeze(0)
+    # x = x.unsqueeze(0)
     x = x.to(device)
 
     sinogram = radon.forward(x)
