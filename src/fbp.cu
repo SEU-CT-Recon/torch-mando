@@ -298,7 +298,7 @@ void Fbp_InitializeReconKernel_Agent(float *&reconKernel, const int N, const flo
   }
 }
 
-void Fbp_MallocManaged_Agent(float *&p, const int size) { cudaMallocManaged((void **)&p, size); }
+// void Fbp_MallocManaged_Agent(float *&p, const int size) { cudaMallocManaged((void **)&p, size); }
 
 void FilterSinogram_Agent(float *sgm, int batch, float *sgm_flt, float *reconKernel, float *u,
                           int sgmWidth, int sgmHeight, int views, float totalScanAngle,
