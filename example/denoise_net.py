@@ -1,0 +1,130 @@
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch_mango import MangoFanbeamFbp, MangoFanbeamFpj, MangoConfig, KERNEL_RAMP
+from torch.utils.data.dataset import Dataset
+from torch.utils.data import DataLoader
+import os
+import numpy as np
+from crip.io import listDirectory, imreadDicom, imwriteTiff, imreadTiff
+from crip.lowdose import injectGaussianNoise
+from tqdm import tqdm
+
+views = 360
+totalAngle = 360
+detEleCount = 648
+detEleSize = 0.8
+imgPixelSize = 0.5
+imgDim = 512
+sid = 750
+sdd = 1250
+cfg = MangoConfig(sid, sdd, 0, totalAngle, views, 2, 0.2, views, detEleCount, imgDim, imgPixelSize, 0, 0, 0, True,
+                  KERNEL_RAMP, 0, detEleSize, 0)
+
+dataDir = '/mnt/new_no1/zhuoxu/RealDEData/CAO_BI_WU/DE_#PP_DE_ABD_A+_1_0_D30F_B_SN140KV_0014'
+noisyDir = '/mnt/new_no1/zhuoxu/NoisySgm'
+
+
+def prepareNoisySinograms():
+    print('Projecting...')
+    for path, file in listDirectory(dataDir, style='both'):
+        img = imreadDicom(path) / 10
+        img = injectGaussianNoise(img, 5)
+        img = torch.from_numpy(img).to(torch.float32).cuda()
+        sgm = MangoFanbeamFpj(img, cfg)
+        imwriteTiff(sgm.detach().cpu().numpy(), os.path.join(noisyDir, file.replace('.IMA', '.tif')))
+
+    print('Projecting done.')
+
+
+class DeNoiseDataset(Dataset):
+    def __init__(self, dir_):
+        super().__init__()
+
+        files = listDirectory(dir_, style='fullpath')
+        noisyFiles = listDirectory(noisyDir, style='fullpath')
+
+        # use clean sinograms
+        self.cleans = torch.from_numpy(np.array([imreadDicom(x, np.float32) / 10 for x in files])).cuda()
+        self.noisys = torch.from_numpy(np.array([imreadTiff(x, np.float32) for x in noisyFiles])).cuda()
+
+    def __getitem__(self, idx):
+        return self.noisys[idx].to(torch.float32), self.cleans[idx].to(torch.float32)
+
+    def __len__(self):
+        return len(self.cleans)
+
+
+class MyNet(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+
+        self.conv1 = nn.Conv2d(1, 16, 3, padding=1)
+        self.conv2 = nn.Conv2d(16, 16, 3, padding=1)
+        self.conv3 = nn.Conv2d(16, 16, 3, padding=1)
+        self.conv4 = nn.Conv2d(16, 1, 3, padding=1)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.conv2(x)
+        x = MangoFanbeamFbp(x, cfg)
+        x = self.conv3(x)
+        x = self.conv4(x)
+
+        return x
+
+
+class AverageMeter():
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.val = 0
+        self.avg = 0
+        self.sum = 0
+        self.count = 0
+
+    def update(self, val):
+        self.val = val
+        self.sum += val
+        self.count += 1
+        self.avg = self.sum / self.count
+
+
+model = MyNet().cuda()
+criterion = nn.MSELoss()
+optimizer = optim.Adam(model.parameters(), lr=0.0001, weight_decay=1e-4)
+epochLoss = AverageMeter()
+nEpochs = 10
+batchSize = 16
+trainSet = DeNoiseDataset('/mnt/new_no1/zhuoxu/RealDEData/CAO_BI_WU/DE_#PP_DE_ABD_A+_1_0_D30F_B_SN140KV_0014')
+trainLoader = DataLoader(trainSet, batch_size=batchSize, shuffle=True, drop_last=True)
+
+for epoch in range(10):
+    with tqdm(total=(len(trainSet) - len(trainSet) % batchSize), ncols=80, desc='[Train]', ascii=True) as t:
+        t.set_description('Epoch: {}/{}'.format(epoch + 1, nEpochs))
+
+        for data in trainLoader:
+            noisy, clean = data
+            # Convert BHW to BCHW.
+            noisy = noisy.unsqueeze(1).cuda()
+            clean = clean.unsqueeze(1).cuda()
+
+            pred = model(noisy).cuda()
+            # print('predshape', pred.shape, '\n')
+            # print('cleanshape', clean.shape, '\n')
+
+            loss = criterion(pred, clean)
+            epochLoss.update(torch.mean(loss))
+
+            # Optimize the model.
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            t.set_postfix(loss='{:.6f}'.format(epochLoss.avg))
+            t.update(len(noisy))
+    
+    torch.save(model.state_dict(), f'/home/zhuoxu/workspace/torch-mango/example/ckp/{epoch}.pth')
+
+    print("Loss >>> ", epochLoss.avg)

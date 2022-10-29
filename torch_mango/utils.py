@@ -23,9 +23,9 @@ def normalize_shape(d):
     :param d: Number of non-batch dimensions
     """
     def wrap(f):
-        def wrapped(self, x, *args, **kwargs):
+        def wrapped(x, *args, **kwargs):
             x, old_shape = _normalize_shape(x, d)
-            y = f(self, x, *args, **kwargs)
+            y = f(x, *args, **kwargs)
 
             return _unnormalize_shape(y, old_shape)
 
