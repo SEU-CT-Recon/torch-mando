@@ -11,10 +11,8 @@ totalAngle = 360
 detEleCount = 650
 detEleSize = 1
 imgPixelSize = 0.5
-
 cfg = MangoConfig(750, 1250, 0, totalAngle, views, 2, 0.2, views, detEleCount, imgDim, imgPixelSize, 0, 0, 0, True,
                   KERNEL_RAMP, 0, detEleSize, 0)
-
 
 def take(x):
     return x.detach().cpu().numpy()

@@ -403,7 +403,7 @@ void mangoCudaFbp(float *sgm, int batchsize, int sgmHeight, int sgmWidth, int vi
   Fbp_InitializeU_Agent(u, sgmWidth, detElementSize, detOffcenter);
   float *beta = nullptr;
   Fbp_InitializeBeta_Agent(beta, views, imgRot, totalScanAngle);
-  bool shortScan = 360.0f - abs(totalScanAngle) < 0.01f;
+  bool shortScan = 360.0f > abs(totalScanAngle);
   float *reconKernel = nullptr;
   Fbp_InitializeReconKernel_Agent(reconKernel, sgmWidth, detElementSize, reconKernelEnum,
                                   reconKernelParam);
