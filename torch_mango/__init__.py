@@ -10,7 +10,7 @@ except Exception as e:
 
 from .utils import normalize_shape
 
-__version__ = "0.0.1"
+__version__ = "1.0.0"
 __all__ = [
     'MangoFanbeamFpj', 'MangoFanbeamFbp', 'MangoFanbeamFpjLayer', 'MangoFanbeamFbpLayer', 'MangoConfig', 'KERNEL_NONE',
     'KERNEL_RAMP', 'KERNEL_HAMMING', 'KERNEL_GAUSSIAN_RAMP'
@@ -156,7 +156,7 @@ class MangoFanbeamFpjLayer(torch.nn.Module):
     def __init__(self, cfg: MangoConfig) -> None:
         super().__init__()
 
-        self.fn = RadonForward.apply
+        self.fn = MangoFanbeamFpj
         self.cfg = cfg
 
     def forward(self, x):
@@ -167,7 +167,7 @@ class MangoFanbeamFbpLayer(torch.nn.Module):
     def __init__(self, cfg: MangoConfig) -> None:
         super().__init__()
 
-        self.fn = RadonBackprojection.apply
+        self.fn = MangoFanbeamFbp
         self.cfg = cfg
 
     def forward(self, x):

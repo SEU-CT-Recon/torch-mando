@@ -1,3 +1,8 @@
+'''
+    This script uses Shepp-Logan phantom to perform forward projection and reconstruct it using torch-mango.
+    shepplogan.npy is from https://github.com/matteo-ronchetti/torch-radon/blob/master/examples/phantom.npy
+'''
+
 import numpy as np
 import torch
 from crip.io import imwriteTiff

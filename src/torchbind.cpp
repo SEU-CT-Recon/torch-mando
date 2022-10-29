@@ -5,17 +5,16 @@
 
 #include <stdio.h>
 
-#define CHECK_CUDA(x) TORCH_CHECK(x.device().is_cuda(), #x " must be a CUDA tensor")
+#define CHECK_ON_CUDA(x) TORCH_CHECK(x.device().is_cuda(), #x " must be a CUDA tensor")
 #define CHECK_CONTIGUOUS(x) TORCH_CHECK(x.is_contiguous(), #x " must be contiguous")
-#define CHECK_INPUT(x)                                                                             \
-  CHECK_CUDA(x);                                                                                   \
-  CHECK_CONTIGUOUS(x)
+
 
 torch::Tensor radon_forward(torch::Tensor x, float offcenter, float sid, float sdd, int views,
                             int detElementCount, float detEleSize, int oversample, float startAngle,
                             float totalScanAngle, int imgDim, float imgPixelSize,
                             float fpjStepSize) {
-  CHECK_INPUT(x);
+  CHECK_ON_CUDA(x);
+  CHECK_CONTIGUOUS(x);
 
   auto dtype = x.dtype();
   const int batch_size = x.size(0);
@@ -35,7 +34,8 @@ torch::Tensor radon_backward(torch::Tensor x, int sgmHeight, int sgmWidth, int v
                              float detElementSize, float detOffCenter, float sid, float sdd,
                              int imgDim, float imgPixelSize, float imgRot, float imgXCenter,
                              float imgYCenter, bool fovCrop) {
-  CHECK_INPUT(x);
+  CHECK_ON_CUDA(x);
+  CHECK_CONTIGUOUS(x);
 
   auto dtype = x.dtype();
   const int batch_size = x.size(0);

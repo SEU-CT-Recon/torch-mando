@@ -4,3 +4,6 @@ build
 dist
 torch_mango.egg-info
 example/*.tif
+example/ckp
+example/valres
+example/ignore

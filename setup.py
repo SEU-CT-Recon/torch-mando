@@ -8,11 +8,11 @@ from buildLib import buildLib
 COMPUTE_CAPABILITY = (61, )
 cuda_home = os.getenv("CUDA_HOME", "/usr/local/cuda")
 print(f"Using CUDA_HOME={cuda_home}")
-buildLib(COMPUTE_CAPABILITY, nvcc='/usr/local/cuda/bin/nvcc')
+buildLib(COMPUTE_CAPABILITY, nvcc='/usr/local/cuda/bin/nvcc', cxx='g++')
 
 setup(
     name='torch_mango',
-    version="0.0.1",
+    version="1.0.0",
     author="z0gSh1u",
     author_email="zx.cs@qq.com",
     description="Fan-beam CT Forward Projection and Reconstruction in PyTorch",

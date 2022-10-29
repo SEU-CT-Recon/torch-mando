@@ -1,11 +1,16 @@
+'''
+    This script trains a denoise network that uses noisy sinograms as input and clean reconstructed images as label
+    using torch-mango.
+'''
+
+import os
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch_mango import MangoFanbeamFbp, MangoFanbeamFpj, MangoConfig, KERNEL_RAMP
+from torch_mango import MangoFanbeamFbp, MangoFanbeamFpj, MangoConfig, KERNEL_RAMP, MangoFanbeamFbpLayer
 from torch.utils.data.dataset import Dataset
 from torch.utils.data import DataLoader
-import os
-import numpy as np
 from crip.io import listDirectory, imreadDicom, imwriteTiff, imreadTiff
 from crip.lowdose import injectGaussianNoise
 from tqdm import tqdm
@@ -21,12 +26,12 @@ sdd = 1250
 cfg = MangoConfig(sid, sdd, 0, totalAngle, views, 2, 0.2, views, detEleCount, imgDim, imgPixelSize, 0, 0, 0, True,
                   KERNEL_RAMP, 0, detEleSize, 0)
 
-dataDir = '/mnt/new_no1/zhuoxu/RealDEData/CAO_BI_WU/DE_#PP_DE_ABD_A+_1_0_D30F_B_SN140KV_0014'
-noisyDir = '/mnt/new_no1/zhuoxu/NoisySgm'
+dataDir = '...'
+noisyDir = '...'
 
 
 def prepareNoisySinograms():
-    print('Projecting...')
+    print('Projecting noisy sinograms...')
     for path, file in listDirectory(dataDir, style='both'):
         img = imreadDicom(path) / 10
         img = injectGaussianNoise(img, 5)
@@ -43,8 +48,6 @@ class DeNoiseDataset(Dataset):
 
         files = listDirectory(dir_, style='fullpath')
         noisyFiles = listDirectory(noisyDir, style='fullpath')
-
-        # use clean sinograms
         self.cleans = torch.from_numpy(np.array([imreadDicom(x, np.float32) / 10 for x in files])).cuda()
         self.noisys = torch.from_numpy(np.array([imreadTiff(x, np.float32) for x in noisyFiles])).cuda()
 
@@ -61,13 +64,15 @@ class MyNet(nn.Module):
 
         self.conv1 = nn.Conv2d(1, 16, 3, padding=1)
         self.conv2 = nn.Conv2d(16, 16, 3, padding=1)
+        # self.fbpLayer = MangoFanbeamFbpLayer(cfg) # If you prefer layer style.
         self.conv3 = nn.Conv2d(16, 16, 3, padding=1)
         self.conv4 = nn.Conv2d(16, 1, 3, padding=1)
 
     def forward(self, x):
         x = self.conv1(x)
         x = self.conv2(x)
-        x = MangoFanbeamFbp(x, cfg)
+        x = MangoFanbeamFbp(x, cfg) # If you prefer functional style.
+        # x = self.fbpLayer(x) # If you prefer layer style.
         x = self.conv3(x)
         x = self.conv4(x)
 
@@ -93,14 +98,14 @@ class AverageMeter():
 
 model = MyNet().cuda()
 criterion = nn.MSELoss()
-optimizer = optim.Adam(model.parameters(), lr=0.0001, weight_decay=1e-4)
+optimizer = optim.Adam(model.parameters(), lr=1e-4, weight_decay=1e-4)
 epochLoss = AverageMeter()
 nEpochs = 10
 batchSize = 16
-trainSet = DeNoiseDataset('/mnt/new_no1/zhuoxu/RealDEData/CAO_BI_WU/DE_#PP_DE_ABD_A+_1_0_D30F_B_SN140KV_0014')
+trainSet = DeNoiseDataset(dataDir)
 trainLoader = DataLoader(trainSet, batch_size=batchSize, shuffle=True, drop_last=True)
 
-for epoch in range(10):
+for epoch in range(nEpochs):
     with tqdm(total=(len(trainSet) - len(trainSet) % batchSize), ncols=80, desc='[Train]', ascii=True) as t:
         t.set_description('Epoch: {}/{}'.format(epoch + 1, nEpochs))
 
@@ -111,9 +116,6 @@ for epoch in range(10):
             clean = clean.unsqueeze(1).cuda()
 
             pred = model(noisy).cuda()
-            # print('predshape', pred.shape, '\n')
-            # print('cleanshape', clean.shape, '\n')
-
             loss = criterion(pred, clean)
             epochLoss.update(torch.mean(loss))
 
@@ -124,7 +126,6 @@ for epoch in range(10):
 
             t.set_postfix(loss='{:.6f}'.format(epochLoss.avg))
             t.update(len(noisy))
-    
-    torch.save(model.state_dict(), f'/home/zhuoxu/workspace/torch-mango/example/ckp/{epoch}.pth')
 
-    print("Loss >>> ", epochLoss.avg)
+    torch.save(model.state_dict(), f'./ckp/{epoch}.pth')
+    print("Loss: ", epochLoss.avg)
