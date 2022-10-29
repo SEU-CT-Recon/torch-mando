@@ -131,7 +131,7 @@ def MangoFanbeamFpj(img, cfg: MangoConfig):
     :returns: PyTorch GPU tensor containing sinograms. Has shape :math:`(d_1, \dots, d_n, len(angles), det\_count)`.
     """
     assert img.size(1) == img.size(2), f"Input images must be square, got ({img.size(1)}, {img.size(2)})."
-    
+
     if not img.is_contiguous():
         img = img.contiguous()
 
@@ -148,26 +148,27 @@ def MangoFanbeamFbp(sinogram, cfg: MangoConfig):
     """
     if not sinogram.is_contiguous():
         sinogram = sinogram.contiguous()
-        
+
     return RadonBackprojection.apply(sinogram, cfg)
 
 
-# class MangoFanbeamFpjLayer(torch.nn.Module):
-#     def __init__(self, *cfg) -> None:
-#         super().__init__()
+class MangoFanbeamFpjLayer(torch.nn.Module):
+    def __init__(self, cfg: MangoConfig) -> None:
+        super().__init__()
 
-#         self.fn = RadonForward.apply
-#         self.cfg = cfg
+        self.fn = RadonForward.apply
+        self.cfg = cfg
 
-#     def forward(self, x):
-#         return self.fn(x, *self.cfg)
+    def forward(self, x):
+        return self.fn(x, self.cfg)
 
-# class MangoFanbeamFbpLayer(torch.nn.Module):
-#     def __init__(self, *cfg) -> None:
-#         super().__init__()
 
-#         self.fn = RadonBackprojection.apply
-#         self.cfg = cfg
+class MangoFanbeamFbpLayer(torch.nn.Module):
+    def __init__(self, cfg: MangoConfig) -> None:
+        super().__init__()
 
-#     def forward(self, x):
-#         return self.fn(x, *self.cfg)
+        self.fn = RadonBackprojection.apply
+        self.cfg = cfg
+
+    def forward(self, x):
+        return self.fn(x, self.cfg)
