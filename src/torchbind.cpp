@@ -23,19 +23,18 @@ torch::Tensor radon_forward(torch::Tensor x, float offcenter, float sid, float s
   auto options = torch::TensorOptions().dtype(dtype).device(x.device());
   auto y = torch::empty({batch_size, views, detElementCount}, options);
 
-  printf("radon_forward batchsize: %d\n", batch_size);
-
-  mangoCudaFpj(x.data_ptr<float>(), batch_size, offcenter, sid, sdd, views, detElementCount, detEleSize, oversample, startAngle,
-               totalScanAngle, imgDim, imgPixelSize, fpjStepSize, y.data_ptr<float>());
+  mangoCudaFpj(x.data_ptr<float>(), batch_size, offcenter, sid, sdd, views, detElementCount,
+               detEleSize, oversample, startAngle, totalScanAngle, imgDim, imgPixelSize,
+               fpjStepSize, y.data_ptr<float>());
 
   return y;
 }
 
 torch::Tensor radon_backward(torch::Tensor x, int sgmHeight, int sgmWidth, int views,
-                             int reconKernelEnum, float reconKernelParam,
-                             float totalScanAngle, float detElementSize, float detOffCenter,
-                             float sid, float sdd, int imgDim, float imgPixelSize, float imgRot,
-                             float imgXCenter, float imgYCenter) {
+                             int reconKernelEnum, float reconKernelParam, float totalScanAngle,
+                             float detElementSize, float detOffCenter, float sid, float sdd,
+                             int imgDim, float imgPixelSize, float imgRot, float imgXCenter,
+                             float imgYCenter, bool fovCrop) {
   CHECK_INPUT(x);
 
   auto dtype = x.dtype();
@@ -44,11 +43,9 @@ torch::Tensor radon_backward(torch::Tensor x, int sgmHeight, int sgmWidth, int v
   auto options = torch::TensorOptions().dtype(dtype).device(x.device());
   auto y = torch::empty({batch_size, imgDim, imgDim}, options);
 
-  printf("radon_backward batchsize: %d\n", batch_size);
-
-  mangoCudaFbp(x.data_ptr<float>(), batch_size, sgmHeight, sgmWidth, views, reconKernelEnum, reconKernelParam,
-               totalScanAngle, detElementSize, detOffCenter, sid, sdd, imgDim, imgPixelSize, imgRot,
-               imgXCenter, imgYCenter, y.data_ptr<float>());
+  mangoCudaFbp(x.data_ptr<float>(), batch_size, sgmHeight, sgmWidth, views, reconKernelEnum,
+               reconKernelParam, totalScanAngle, detElementSize, detOffCenter, sid, sdd, imgDim,
+               imgPixelSize, imgRot, imgXCenter, imgYCenter, fovCrop, y.data_ptr<float>());
 
   return y;
 }

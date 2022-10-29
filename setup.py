@@ -3,21 +3,19 @@ from torch.utils.cpp_extension import BuildExtension, CUDAExtension
 import os
 from buildLib import buildLib
 
-with open("README.md", "r") as fh:
-    long_description = fh.read()
-
+# TODO Configure them.
+# customize this according to your GPU (see https://developer.nvidia.com/cuda-gpus)
+COMPUTE_CAPABILITY = (61, )
 cuda_home = os.getenv("CUDA_HOME", "/usr/local/cuda")
 print(f"Using CUDA_HOME={cuda_home}")
-buildLib((61,), nvcc='/usr/local/cuda/bin/nvcc')
+buildLib(COMPUTE_CAPABILITY, nvcc='/usr/local/cuda/bin/nvcc')
 
 setup(
     name='torch_mango',
     version="0.0.1",
     author="z0gSh1u",
     author_email="zx.cs@qq.com",
-    description="Fan-beam CT Forward Projection And Reconstruction in PyTorch",
-    long_description=long_description,
-    long_description_content_type="text/markdown",
+    description="Fan-beam CT Forward Projection and Reconstruction in PyTorch",
     url="https://github.com/z0gSh1u/torch-mango",
     packages=['torch_mango'],
     package_dir={
@@ -33,8 +31,4 @@ setup(
     ],
     cmdclass={'build_ext': BuildExtension},
     zip_safe=False,
-    classifiers=[
-        "Programming Language :: Python :: 3",
-        "Operating System :: POSIX :: Linux",
-    ],
 )

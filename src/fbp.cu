@@ -1,7 +1,7 @@
 #include "fbp.h"
 #include "utils.h"
 
-#include <stdio.h>
+#include <cuda_runtime.h>
 
 __global__ void Fbp_InitDistance(float *distance_array, const float distance, const int V) {
   int tid = threadIdx.x + blockDim.x * blockIdx.x;
@@ -18,7 +18,7 @@ __global__ void Fbp_InitU(float *u, const int N, const float du, const float off
 }
 
 __global__ void Fbp_InitBeta(float *beta, const int V, const float rotation,
-                         const float totalScanAngle) {
+                             const float totalScanAngle) {
   int tid = threadIdx.x + blockDim.x * blockIdx.x;
   if (tid < V) {
     beta[tid] = (totalScanAngle / V * tid + rotation) * PI / 180;
@@ -76,19 +76,18 @@ __global__ void InitReconKernel_GaussianApodized(float *reconKernel, const int N
 
 /*
   weight the sinogram data
-  sgm: sinogram (width x height x slice)
+  sgm: sinogram (width x height)
   N: width
   H: height
   V: views
-  S: slice
   sdd: source to detector distance
 */
-__global__ void WeightSinogram_device(float *sgm, int batch, const float *u, const int N,
-                                      const int H, const int V, float *sdd_array,
-                                      float totalScanAngle, bool shortScan, float *beta_array,
-                                      float *offcenter_array) {
+__global__ void WeightSinogram_device(float *sgm, const float *u, const int N, const int H,
+                                      const int V, float *sdd_array, float totalScanAngle,
+                                      bool shortScan, float *beta_array, float *offcenter_array) {
   int col = threadIdx.x + blockDim.x * blockIdx.x;
   int row = threadIdx.y + blockDim.y * blockIdx.y;
+  int batch = threadIdx.z + blockDim.z * blockIdx.z;
 
   if (col < N && row < V) {
     float offcenter_bias = offcenter_array[row] - offcenter_array[0];
@@ -101,7 +100,6 @@ __global__ void WeightSinogram_device(float *sgm, int batch, const float *u, con
       float beta = abs(beta_array[row] - beta_array[0]);
       float rotation_direction = abs(totalScanAngle) / (totalScanAngle);
       float gamma = atan(u_actual / sdd) * rotation_direction;
-
       float gamma_max = abs(totalScanAngle) * PI / 180.0f - PI;
 
       // calculation of the parker weighting
@@ -114,12 +112,8 @@ __global__ void WeightSinogram_device(float *sgm, int batch, const float *u, con
       } else if (beta >= PI - 2 * gamma && beta <= PI + gamma_max) {
         weighting = sin(PI / 2 * (PI + gamma_max - beta) / (gamma_max + 2 * gamma));
         weighting = weighting * weighting;
-      } else {
-        // printf("ERROR!");
       }
       sgm[batch * N * H + row * N + col] *= weighting;
-    } else {
-      ;
     }
   }
 }
@@ -135,16 +129,16 @@ __global__ void WeightSinogram_device(float *sgm, int batch, const float *u, con
   u: the position (coordinate) of each detector element
   du: detector element size [mm]
 */
-__global__ void ConvolveSinogram_device(float *sgm_flt, int batch, const float *sgm,
-                                        float *reconKernel, const int N, const int H, const int V,
-                                        const float *u, const float du) {
+__global__ void ConvolveSinogram_device(float *sgm_flt, const float *sgm, float *reconKernel,
+                                        const int N, const int H, const int V, const float *u,
+                                        const float du) {
   int col = threadIdx.x + blockDim.x * blockIdx.x;
   int row = threadIdx.y + blockDim.y * blockIdx.y;
+  int batch = threadIdx.z + blockDim.z * blockIdx.z;
 
   if (col < N && row < V) {
     // temporary variable to speed up
     float sgm_flt_local = 0;
-
     for (int i = 0; i < N; i++) {
       sgm_flt_local += sgm[batch * N * H + row * N + i] * reconKernel[N - 1 - col + i];
     }
@@ -162,10 +156,11 @@ __global__ void ConvolveSinogram_device(float *sgm_flt, int batch, const float *
   V: number of views
   S: number of slices
 */
-__global__ void CopySinogram_device(float *sgm_flt, int batch, const float *sgm, const int N,
-                                    const int H, const int V) {
+__global__ void CopySinogram_device(float *sgm_flt, const float *sgm, const int N, const int H,
+                                    const int V) {
   int col = threadIdx.x + blockDim.x * blockIdx.x;
   int row = threadIdx.y + blockDim.y * blockIdx.y;
+  int batch = threadIdx.z + blockDim.z * blockIdx.z;
 
   if (col < N && row < V) {
     sgm_flt[batch * N * H + row * N + col] = sgm[batch * N * H + row * N + col];
@@ -188,29 +183,26 @@ __global__ void CopySinogram_device(float *sgm_flt, int batch, const float *sgm,
   dx: image pixel size [mm]
   (xc, yc): image center position [mm, mm]
 */
-__global__ void BackprojectPixelDriven_device(float *sgm, int batch, float *img, float *u,
-                                              float *beta, bool shortScan, const int N, const int V,
-                                              const int M, float *sdd_array, float *sid_array,
+__global__ void BackprojectPixelDriven_device(float *sgm, float *u, float *beta, bool shortScan,
+                                              const int N, const int V, const int M,
+                                              float *sdd_array, float *sid_array,
                                               float *offcenter_array, const float dx,
-                                              const float xc, const float yc) {
-
+                                              const float xc, const float yc, float *img) {
   int col = threadIdx.x + blockDim.x * blockIdx.x;
   int row = threadIdx.y + blockDim.y * blockIdx.y;
+  int batch = threadIdx.z + blockDim.z * blockIdx.z;
 
   float du = u[1] - u[0];
 
   if (col < M && row < M) {
-
     float x = (col - (M - 1) / 2.0f) * dx + xc;
     float y = ((M - 1) / 2.0f - row) * dx + yc;
     float U, u0;
     float mag_factor;
     float w;
     int k;
-    float delta_beta; // delta_beta for the integral calculation (nonuniform scan angle)
-
-    // temporary local variable to speed up
-    float img_local = 0;
+    float delta_beta;    // delta_beta for the integral calculation (nonuniform scan angle)
+    float img_local = 0; // temporary local variable to speed up
 
     for (int view = 0; view < V; view++) {
       float offcenter_bias = offcenter_array[view] - offcenter_array[0];
@@ -255,36 +247,39 @@ __global__ void BackprojectPixelDriven_device(float *sgm, int batch, float *img,
 }
 
 void Fbp_InitializeDistance_Agent(float *&distance_array, const float distance, const int V) {
-  if (distance_array != nullptr)
+  if (distance_array != nullptr) {
     cudaFree(distance_array);
-
-  cudaMalloc((void **)&distance_array, V * sizeof(float));
+  }
+  cudaMalloc(&distance_array, V * sizeof(float));
   Fbp_InitDistance<<<(V + 511) / 512, 512>>>(distance_array, distance, V);
 }
 
 void Fbp_InitializeU_Agent(float *&u, const int N, const float du, const float offcenter) {
-  if (u != nullptr)
+  if (u != nullptr) {
     cudaFree(u);
+  }
 
-  cudaMalloc((void **)&u, N * sizeof(float));
+  cudaMalloc(&u, N * sizeof(float));
   Fbp_InitU<<<(N + 511) / 512, 512>>>(u, N, du, offcenter);
 }
 
 void Fbp_InitializeBeta_Agent(float *&beta, const int V, const float rotation,
-                          const float totalScanAngle) {
-  if (beta != nullptr)
+                              const float totalScanAngle) {
+  if (beta != nullptr) {
     cudaFree(beta);
+  }
 
-  cudaMalloc((void **)&beta, V * sizeof(float));
+  cudaMalloc(&beta, V * sizeof(float));
   Fbp_InitBeta<<<(V + 511) / 512, 512>>>(beta, V, rotation, totalScanAngle);
 }
 
-void Fbp_InitializeReconKernel_Agent(float *&reconKernel, const int N, const float du, int kernelEnum,
-                                 float kernelParam) {
-  if (reconKernel != nullptr)
+void Fbp_InitializeReconKernel_Agent(float *&reconKernel, const int N, const float du,
+                                     int kernelEnum, float kernelParam) {
+  if (reconKernel != nullptr) {
     cudaFree(reconKernel);
+  }
 
-  cudaMalloc((void **)&reconKernel, (2 * N - 1) * sizeof(float));
+  cudaMalloc(&reconKernel, (2 * N - 1) * sizeof(float));
 
   if (kernelEnum == KERNEL_RAMP) {
     InitReconKernel_Hamming<<<(2 * N - 1 + 511) / 512, 512>>>(reconKernel, N, du, 1.0f);
@@ -298,18 +293,16 @@ void Fbp_InitializeReconKernel_Agent(float *&reconKernel, const int N, const flo
   }
 }
 
-// void Fbp_MallocManaged_Agent(float *&p, const int size) { cudaMallocManaged((void **)&p, size); }
-
-void FilterSinogram_Agent(float *sgm, int batch, float *sgm_flt, float *reconKernel, float *u,
-                          int sgmWidth, int sgmHeight, int views, float totalScanAngle,
-                          bool shortScan, float *beta, float *sdd_array, int kernelEnum,
-                          float detEltSize, float *offcenter_array) {
+void FilterSinogram_Agent(float *sgm, int batchsize, float *reconKernel, float *u, int sgmWidth,
+                          int sgmHeight, int views, float totalScanAngle, bool shortScan,
+                          float *beta, float *sdd_array, int kernelEnum, float detEltSize,
+                          float *offcenter_array, float *sgm_flt) {
   // Step 1: weight the sinogram
-  dim3 grid((sgmWidth + 15) / 16, (sgmHeight + 15) / 16);
-  dim3 block(16, 16);
+  dim3 grid((sgmWidth + 15) / 16, (sgmHeight + 15) / 16, batchsize);
+  dim3 block(16, 16, 1);
 
   // Common attenuation imaging
-  WeightSinogram_device<<<grid, block>>>(sgm, batch, u, sgmWidth, sgmHeight, views, sdd_array,
+  WeightSinogram_device<<<grid, block>>>(sgm, u, sgmWidth, sgmHeight, views, sdd_array,
                                          totalScanAngle, shortScan, beta, offcenter_array);
 
   cudaDeviceSynchronize();
@@ -320,45 +313,66 @@ void FilterSinogram_Agent(float *sgm, int batch, float *sgm_flt, float *reconKer
     // first by the ramp filter, then by the gaussian filter
     float du = detEltSize;
     float *reconKernel_ramp;
-    cudaMalloc((void **)&reconKernel_ramp, (2 * sgmWidth - 1) * sizeof(float));
+    cudaMalloc(&reconKernel_ramp, (2 * sgmWidth - 1) * sizeof(float));
     InitReconKernel_Hamming<<<(2 * sgmWidth - 1 + 511) / 512, 512>>>(reconKernel_ramp, sgmWidth, du,
                                                                      1);
     cudaDeviceSynchronize();
 
     // intermidiate filtration result is saved in sgm_flt_ramp
     float *sgm_flt_ramp;
-    cudaMalloc((void **)&sgm_flt_ramp, sgmWidth * views * sizeof(float));
-    ConvolveSinogram_device<<<grid, block>>>(sgm_flt_ramp, batch, sgm, reconKernel_ramp, sgmWidth,
+    cudaMalloc(&sgm_flt_ramp, sgmWidth * views * sizeof(float));
+    ConvolveSinogram_device<<<grid, block>>>(sgm_flt_ramp, sgm, reconKernel_ramp, sgmWidth,
                                              sgmHeight, views, u, detEltSize);
     cudaDeviceSynchronize();
     // the height of the filtered sinogram shrinks to number of views, so the convolution parameters
     // need to be adjusted accordingly
-    ConvolveSinogram_device<<<grid, block>>>(sgm_flt, batch, sgm_flt_ramp, reconKernel, sgmWidth,
-                                             views, views, u, detEltSize);
+    ConvolveSinogram_device<<<grid, block>>>(sgm_flt, sgm_flt_ramp, reconKernel, sgmWidth, views,
+                                             views, u, detEltSize);
     cudaDeviceSynchronize();
 
     cudaFree(reconKernel_ramp);
     cudaFree(sgm_flt_ramp);
   } else if (kernelEnum == KERNEL_NONE) {
-    CopySinogram_device<<<grid, block>>>(sgm_flt, batch, sgm, sgmWidth, sgmHeight, views);
+    CopySinogram_device<<<grid, block>>>(sgm_flt, sgm, sgmWidth, sgmHeight, views);
     cudaDeviceSynchronize();
   } else {
-    ConvolveSinogram_device<<<grid, block>>>(sgm_flt, batch, sgm, reconKernel, sgmWidth, sgmHeight,
-                                             views, u, detEltSize);
+    ConvolveSinogram_device<<<grid, block>>>(sgm_flt, sgm, reconKernel, sgmWidth, sgmHeight, views,
+                                             u, detEltSize);
     cudaDeviceSynchronize();
   }
 }
 
-void BackprojectPixelDriven_Agent(float *sgm_flt, int batch, float *img, float *sdd_array,
-                                  float *sid_array, float *offcenter_array, float *u, float *beta,
-                                  int imgDim, bool shortScan, int sgmWidth, int views,
-                                  float imgPixelSize, float xCenter, float yCenter) {
-  dim3 grid((imgDim + 15) / 16, (imgDim + 15) / 16);
-  dim3 block(16, 16);
+void BackprojectPixelDriven_Agent(float *sgm_flt, int batchsize, float *sdd_array, float *sid_array,
+                                  float *offcenter_array, float *u, float *beta, int imgDim,
+                                  bool shortScan, int sgmWidth, int views, float imgPixelSize,
+                                  float xCenter, float yCenter, float *img) {
+  dim3 grid((imgDim + 15) / 16, (imgDim + 15) / 16, batchsize);
+  dim3 block(16, 16, 1);
 
-  BackprojectPixelDriven_device<<<grid, block>>>(sgm_flt, batch, img, u, beta, shortScan, sgmWidth,
-                                                 views, imgDim, sdd_array, sid_array,
-                                                 offcenter_array, imgPixelSize, xCenter, yCenter);
+  BackprojectPixelDriven_device<<<grid, block>>>(sgm_flt, u, beta, shortScan, sgmWidth, views,
+                                                 imgDim, sdd_array, sid_array, offcenter_array,
+                                                 imgPixelSize, xCenter, yCenter, img);
+  cudaDeviceSynchronize();
+}
+
+__global__ void FOVCrop_device(float *img, int imgDim) {
+  int col = threadIdx.x + blockDim.x * blockIdx.x;
+  int row = threadIdx.y + blockDim.y * blockIdx.y;
+  int batch = threadIdx.z + blockDim.z * blockIdx.z;
+
+  if (row < imgDim && col < imgDim) {
+    float dist2 = powf(imgDim / 2.0f - row, 2) + powf(imgDim / 2.0f - col, 2);
+    if (dist2 > powf(imgDim / 2.0f, 2))
+      img[batch * imgDim * imgDim + row * imgDim + col] = 0;
+  }
+}
+
+void FOVCrop_Agent(float *img, int batchsize, int imgDim) {
+  dim3 grid((imgDim + 15) / 16, (imgDim + 15) / 16, batchsize);
+  dim3 block(16, 16, 1);
+
+  FOVCrop_device<<<grid, block>>>(img, imgDim);
+
   cudaDeviceSynchronize();
 }
 
@@ -374,7 +388,10 @@ void mangoCudaFbp(float *sgm, int batchsize, int sgmHeight, int sgmWidth, int vi
                   int reconKernelEnum, float reconKernelParam, float totalScanAngle,
                   float detElementSize, float detOffcenter, float sid, float sdd, int imgDim,
                   float imgPixelSize, float imgRot, float imgXCenter, float imgYCenter,
-                  float *img) {
+                  bool fovCrop, float *img) {
+  const unsigned int SgmBytes = batchsize * sgmWidth * sgmHeight * sizeof(float);
+  const unsigned int ImgBytes = batchsize * imgDim * imgDim * sizeof(float);
+
   // Initialize parameters.
   float *sddArray = nullptr;
   Fbp_InitializeDistance_Agent(sddArray, sdd, views);
@@ -389,31 +406,36 @@ void mangoCudaFbp(float *sgm, int batchsize, int sgmHeight, int sgmWidth, int vi
   bool shortScan = 360.0f - abs(totalScanAngle) < 0.01f;
   float *reconKernel = nullptr;
   Fbp_InitializeReconKernel_Agent(reconKernel, sgmWidth, detElementSize, reconKernelEnum,
-                              reconKernelParam);
+                                  reconKernelParam);
+
+  float *sgm_device = nullptr;
+  cudaMalloc(&sgm_device, SgmBytes);
+  cudaMemcpy(sgm_device, sgm, SgmBytes, cudaMemcpyHostToDevice);
+  float *filtered_sgm = nullptr;
+  cudaMalloc(&filtered_sgm, SgmBytes);
+  float *img_device = nullptr;
+  cudaMalloc(&img_device, ImgBytes);
 
   // Filter the sinogram.
-  float *filteredSgm = nullptr;
-  // Fbp_MallocManaged_Agent(filteredSgm, sgmWidth * sgmWidth * sizeof(float));
-  if (filteredSgm != nullptr)
-    cudaFree(filteredSgm);
-
-  cudaMalloc((void **)&filteredSgm, sgmWidth * sgmWidth * sizeof(float));
+  FilterSinogram_Agent(sgm_device, batchsize, reconKernel, u, sgmWidth, sgmHeight, views,
+                       totalScanAngle, shortScan, beta, sddArray, reconKernelEnum, detElementSize,
+                       offcenterArray, filtered_sgm);
   cudaCheckError();
 
-  for (int batch = 0; batch < batchsize; batch++) {
-    printf("FBP inside batch\n");
+  BackprojectPixelDriven_Agent(filtered_sgm, batchsize, sddArray, sidArray, offcenterArray, u, beta,
+                               imgDim, shortScan, sgmWidth, views, imgPixelSize, imgXCenter,
+                               imgYCenter, img_device);
+  cudaCheckError();
 
-    FilterSinogram_Agent(sgm, batch, filteredSgm, reconKernel, u, sgmWidth, sgmHeight, views,
-                         totalScanAngle, shortScan, beta, sddArray, reconKernelEnum, detElementSize,
-                         offcenterArray);
-    cudaCheckError();
-
-    BackprojectPixelDriven_Agent(filteredSgm, batch, img, sddArray, sidArray, offcenterArray, u,
-                                 beta, imgDim, shortScan, sgmWidth, views, imgPixelSize, imgXCenter,
-                                 imgYCenter);
+  if (fovCrop) {
+    FOVCrop_Agent(img_device, batchsize, imgDim);
     cudaCheckError();
   }
 
-  cudaFree(filteredSgm);
+  cudaMemcpy(img, img_device, ImgBytes, cudaMemcpyDeviceToHost);
   cudaDeviceSynchronize();
+
+  Fbp_FreeMemory_Agent(filtered_sgm);
+  Fbp_FreeMemory_Agent(sgm_device);
+  Fbp_FreeMemory_Agent(img_device);
 }

@@ -1,7 +1,7 @@
 #include "fpj.h"
 #include "utils.h"
 
-#include <stdio.h>
+#include <cuda_runtime.h>
 
 __global__ void Fpj_InitDistance(float *distance_array, const float distance, const int V) {
   int tid = threadIdx.x + blockDim.x * blockIdx.x;
@@ -10,7 +10,7 @@ __global__ void Fpj_InitDistance(float *distance_array, const float distance, co
   }
 }
 
-__global__ void Fpj_d(float *u, const int N, const float du, const float offcenter) {
+__global__ void Fpj_InitU(float *u, const int N, const float du, const float offcenter) {
   int tid = threadIdx.x + blockDim.x * blockIdx.x;
   if (tid < N) {
     u[tid] = (tid - (N - 1) / 2.0f) * du + offcenter;
@@ -26,25 +26,28 @@ __global__ void Fpj_InitBeta(float *beta, const int V, const float startAngle,
 }
 
 void Fpj_InitializeDistance_Agent(float *&distance_array, const float distance, const int V) {
-  if (distance_array != nullptr)
+  if (distance_array != nullptr) {
     cudaFree(distance_array);
+  }
 
   cudaMalloc((void **)&distance_array, V * sizeof(float));
   Fpj_InitDistance<<<(V + 511) / 512, 512>>>(distance_array, distance, V);
 }
 
 void Fpj_InitializeU_Agent(float *&u, const int N, const float du, const float offcenter) {
-  if (u != nullptr)
+  if (u != nullptr) {
     cudaFree(u);
+  }
 
   cudaMalloc((void **)&u, N * sizeof(float));
-  Fpj_d<<<(N + 511) / 512, 512>>>(u, N, du, offcenter);
+  Fpj_InitU<<<(N + 511) / 512, 512>>>(u, N, du, offcenter);
 }
 
 void Fpj_InitializeBeta_Agent(float *&beta, const int V, const float startAngle,
                               const float totalScanAngle) {
-  if (beta != nullptr)
+  if (beta != nullptr) {
     cudaFree(beta);
+  }
 
   cudaMalloc((void **)&beta, V * sizeof(float));
   Fpj_InitBeta<<<(V + 511) / 512, 512>>>(beta, V, startAngle, totalScanAngle);
@@ -74,42 +77,33 @@ __global__ void ForwardProjectionBilinear_device(float *img, int batchsize, floa
   if (col < N && row < V && batch < batchsize) {
     // half of image side length
     float D = float(M) * dx / 2.0f;
-
     // get the sid and sdd for a given view
     float sid = sid_array[row];
     float sdd = sdd_array[row];
-
     // current source position
     float xs = sid * cosf(beta[row]);
     float ys = sid * sinf(beta[row]);
-
     // calculate offcenter bias
     float offcenter_bias = offcenter_array[row] - offcenter_array[0];
-
     // current detector element position
     float xd =
         -(sdd - sid) * cosf(beta[row]) + (u[col] + offcenter_bias) * cosf(beta[row] - PI / 2.0f);
     float yd =
         -(sdd - sid) * sinf(beta[row]) + (u[col] + offcenter_bias) * sinf(beta[row] - PI / 2.0f);
-
     // step point region
     float L_min = sid - sqrt(2 * D * D);
     float L_max = sid + sqrt(2 * D * D);
-
     // source to detector element distance
     float sed = sqrtf((xs - xd) * (xs - xd) + (ys - yd) * (ys - yd)); // for fan beam case
-
     // the point position
     float x, y;
     // the point index
     int kx, ky;
     // weighting factor for linear interpolation
     float wx, wy;
-
     // the most upper left image pixel position
     float x0 = -D + dx / 2.0f;
     float y0 = D - dx / 2.0f;
-
     sgm[batch * N * V + row * N + col] = 0;
 
     // calculate line integration
@@ -144,14 +138,15 @@ __global__ void ForwardProjectionBilinear_device(float *img, int batchsize, floa
   }
 }
 
-// sgm_large: sinogram data before binning
-// sgm: sinogram data after binning
-// N: number of detector elements (after binning)
-// V: number of views
-// S: number of slices
-// binSize: bin size
-__global__ void BinSinogram_device(float *sgm_large, int batchsize, float *sgm, int N, int V,
-                                   int binSize) {
+/*
+ sgm_large: sinogram data before binning
+ sgm: sinogram data after binning
+ N: number of detector elements (after binning)
+ V: number of views
+ binSize: bin size
+*/
+__global__ void BinSinogram_device(float *sgm_large, int batchsize, int N, int V, int binSize,
+                                   float *sgm) {
   int col = threadIdx.x + blockDim.x * blockIdx.x;
   int row = threadIdx.y + blockDim.y * blockIdx.y;
   int batch = threadIdx.z + blockDim.z * blockIdx.z;
@@ -169,11 +164,11 @@ __global__ void BinSinogram_device(float *sgm_large, int batchsize, float *sgm, 
   }
 }
 
-void ForwardProjectionBilinear_Agent(float *&image, int batchsize, float *&sinogram,
-                                     const float *sid_array, const float *sdd_array,
-                                     const float *offcenter_array, const float *u,
-                                     const float *beta, int detEltCount, int oversampleSize,
-                                     int views, int imgDim, float pixelSize, float fpjStepSize) {
+void ForwardProjectionBilinear_Agent(float *&image, int batchsize, const float *sid_array,
+                                     const float *sdd_array, const float *offcenter_array,
+                                     const float *u, const float *beta, int detEltCount,
+                                     int oversampleSize, int views, int imgDim, float pixelSize,
+                                     float fpjStepSize, float *&sinogram) {
   dim3 grid((detEltCount * oversampleSize + 7) / 8, (views + 7) / 8, batchsize);
   dim3 block(8, 8, 1);
 
@@ -184,18 +179,16 @@ void ForwardProjectionBilinear_Agent(float *&image, int batchsize, float *&sinog
   cudaDeviceSynchronize();
 }
 
-void BinSinogram(float *&sinogram_large, int batchsize, float *&sinogram, int detEltCount,
-                 int views, int oversampleSize) {
+void BinSinogram(float *&sinogram_large, int batchsize, int detEltCount, int views,
+                 int oversampleSize, float *&sinogram) {
   dim3 grid((detEltCount + 7) / 8, (views + 7) / 8, batchsize);
   dim3 block(8, 8, 1);
 
-  BinSinogram_device<<<grid, block>>>(sinogram_large, batchsize, sinogram, detEltCount, views,
-                                      oversampleSize);
+  BinSinogram_device<<<grid, block>>>(sinogram_large, batchsize, detEltCount, views, oversampleSize,
+                                      sinogram);
 
   cudaDeviceSynchronize();
 }
-
-// void Fpj_MallocManaged_Agent(float *&p, const int size) { cudaMallocManaged((void **)&p, size); }
 
 void Fpj_FreeMemory_Agent(float *&p) {
   cudaFree(p);
@@ -206,8 +199,12 @@ void Fpj_FreeMemory_Agent(float *&p) {
  * This is the very main.
  */
 void mangoCudaFpj(float *img, int batchsize, float offcenter, float sid, float sdd, int views,
-                  int detElementCount, float detEleSize, int oversample, float startAngle, float totalScanAngle,
-                  int imgDim, float imgPixelSize, float fpjStepSize, float *sgm) {
+                  int detElementCount, float detEleSize, int oversample, float startAngle,
+                  float totalScanAngle, int imgDim, float imgPixelSize, float fpjStepSize,
+                  float *sgm) {
+  const unsigned int SgmBytes = batchsize * detElementCount * views * sizeof(float);
+  const unsigned int ImgBytes = batchsize * imgDim * imgDim * sizeof(float);
+
   float *sddArray = nullptr;
   Fpj_InitializeDistance_Agent(sddArray, sdd, views);
   float *sidArray = nullptr;
@@ -215,38 +212,30 @@ void mangoCudaFpj(float *img, int batchsize, float offcenter, float sid, float s
   float *offcenterArray = nullptr;
   Fpj_InitializeDistance_Agent(offcenterArray, offcenter, views);
   float *u = nullptr;
-  Fpj_InitializeU_Agent(u, detElementCount * oversample, detEleSize / (float)oversample,
-                        offcenter);
+  Fpj_InitializeU_Agent(u, detElementCount * oversample, detEleSize / (float)oversample, offcenter);
   float *beta = nullptr;
   Fpj_InitializeBeta_Agent(beta, views, startAngle, totalScanAngle);
+
   float *sgm_large = nullptr;
-  // Fpj_MallocManaged_Agent(sgm_large, detElementCount * oversample * views * sizeof(float));
-  cudaMalloc((void **)&sgm_large, batchsize * detElementCount * oversample * views * sizeof(float));
-  cudaCheckError();
-
-  float *img_device = nullptr;
-  cudaMalloc((void **)&img_device, batchsize * imgDim * imgDim * sizeof(float));
-  cudaCheckError();
-  cudaMemcpy(img_device, img, batchsize * imgDim * imgDim * sizeof(float), cudaMemcpyHostToDevice);
-  cudaCheckError();
-
+  cudaMalloc(&sgm_large, SgmBytes * oversample);
   float *sgm_device = nullptr;
-  cudaMalloc((void **)&sgm_device, batchsize * detElementCount * views * sizeof(float));
-  cudaCheckError();
-  printf("FPJ inside batch\n");
-  ForwardProjectionBilinear_Agent(img_device, batchsize, sgm_large, sidArray, sddArray,
-                                  offcenterArray, u, beta, detElementCount, oversample, views,
-                                  imgDim, imgPixelSize, fpjStepSize);
+  cudaMalloc(&sgm_device, SgmBytes);
+  float *img_device = nullptr;
+  cudaMalloc(&img_device, ImgBytes);
+  cudaMemcpy(img_device, img, ImgBytes, cudaMemcpyHostToDevice);
+
+  ForwardProjectionBilinear_Agent(img_device, batchsize, sidArray, sddArray, offcenterArray, u,
+                                  beta, detElementCount, oversample, views, imgDim, imgPixelSize,
+                                  fpjStepSize, sgm_large);
   cudaCheckError();
 
-  BinSinogram(sgm_large, batchsize, sgm_device, detElementCount, views, oversample);
+  BinSinogram(sgm_large, batchsize, detElementCount, views, oversample, sgm_device);
   cudaCheckError();
 
-  cudaMemcpy(sgm, sgm_device, batchsize * detElementCount * oversample * views * sizeof(float), cudaMemcpyDeviceToHost);
-
+  cudaMemcpy(sgm, sgm_device, SgmBytes, cudaMemcpyDeviceToHost);
   cudaDeviceSynchronize();
 
-  cudaFree(img_device);
-  cudaFree(sgm_device);
-  cudaFree(sgm_large);
+  Fpj_FreeMemory_Agent(img_device);
+  Fpj_FreeMemory_Agent(sgm_device);
+  Fpj_FreeMemory_Agent(sgm_large);
 }

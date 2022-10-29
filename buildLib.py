@@ -8,19 +8,12 @@ def run(command):
         exit(-1)
 
 
-def run_compilation(files, f):
-    for src, dst in files:
-        if not os.path.exists(dst) or os.path.getmtime(src) > os.path.getmtime(dst):
-            print(f"\u001b[32mCompiling {src}\u001b[0m")
-            command = f(src, dst)
-            run(command)
-        else:
-            print(f"\u001b[32mSkipping {src}\u001b[0m")
-
-
-def buildLib(ccs, nvcc, cxx="g++", verbose=True):
+def buildLib(ccs, nvcc='nvcc', cxx="g++", verbose=True):
     include_dirs = ["include"]
-    cu_files = [('src/fpj.cu', 'objs/fpj.o'), ('src/fbp.cu', 'objs/fbp.o')]
+    cu_files = [
+        ('src/fpj.cu', 'objs/fpj.o'),
+        ('src/fbp.cu', 'objs/fbp.o'),
+    ]
     all_objects = [y for _, y in cu_files]
     include_flags = [f"-I{x}" for x in include_dirs]
 
@@ -34,9 +27,12 @@ def buildLib(ccs, nvcc, cxx="g++", verbose=True):
 
     nvcc_flags = " ".join(nvcc_flags)
 
-    # compile
     if not os.path.exists('objs'):
         os.makedirs('objs')
-    run_compilation(cu_files, lambda src, dst: f"{nvcc} {nvcc_flags} -c {src} -o {dst}")
+
+    nvcc_command = lambda src, dst: f"{nvcc} {nvcc_flags} -c {src} -o {dst}"
+    for src, dst in cu_files:
+        print(f"\u001b[32mCompiling {src}\u001b[0m")
+        run(nvcc_command(src, dst))
 
     run(f"ar rc objs/libmango.a {' '.join(all_objects)}")

@@ -3,3 +3,4 @@ objs
 build
 dist
 torch_mango.egg-info
+example/*.tif

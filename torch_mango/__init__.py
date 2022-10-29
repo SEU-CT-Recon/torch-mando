@@ -11,7 +11,8 @@ except Exception as e:
 from .utils import normalize_shape
 
 __version__ = "0.0.1"
-__all__ = ['RadonFanbeam']
+__all__ = ['MangoFanbeam', 'MangoFanbeamFpjLayer', 'MangoFanbeamFbpLayer']
+
 
 class RadonForward(torch.autograd.Function):
     @staticmethod
@@ -33,7 +34,7 @@ class RadonForward(torch.autograd.Function):
 
 class RadonBackprojection(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, x, cfg):
+    def forward(ctx, x, *cfg):
         ctx.cfg = cfg
         image = torch_mango_cuda.backward(x, *ctx.cfg)
 
@@ -49,9 +50,10 @@ class RadonBackprojection(torch.autograd.Function):
         return grad, None
 
 
-class RadonFanbeam():
+class MangoFanbeam():
     def __init__(self, sid, sdd, views, detEleSize, oversample, startAngle, totalAngle, imgDim, imgPixSize, fpjStepSize,
-                 sgmHeight, sgmWidth, reconKernelName, reconKernelParam, detOffcenter, imgRot, imgXCenter, imgYCenter):
+                 sgmHeight, sgmWidth, reconKernelName, reconKernelParam, detOffcenter, imgRot, imgXCenter, imgYCenter,
+                 fovCrop):
         self.sid = sid
         self.sdd = sdd
         self.views = views
@@ -70,6 +72,7 @@ class RadonFanbeam():
         self.imgRot = imgRot
         self.imgXCenter = imgXCenter
         self.imgYCenter = imgYCenter
+        self.fovCrop = fovCrop
 
     def _check_input(self, x, square=False):
         if not x.is_contiguous():
@@ -90,8 +93,9 @@ class RadonFanbeam():
         """
         x = self._check_input(x, square=True)
 
-        return RadonForward.apply(x, self.detOffcenter, self.sid, self.sdd, self.views, self.sgmWidth, self.detEleSize, self.oversample,
-                                  self.startAngle, self.totalAngle, self.imgDim, self.imgPixSize, self.fpjStepSize)
+        return RadonForward.apply(x, self.detOffcenter, self.sid, self.sdd, self.views, self.sgmWidth, self.detEleSize,
+                                  self.oversample, self.startAngle, self.totalAngle, self.imgDim, self.imgPixSize,
+                                  self.fpjStepSize)
 
     @normalize_shape(2)
     def backprojection(self, sinogram):
@@ -106,8 +110,30 @@ class RadonFanbeam():
         return RadonBackprojection.apply(sinogram, self.sgmHeight, self.sgmWidth, self.views, self.reconKernelName,
                                          self.reconKernelParam, self.totalAngle, self.detEleSize, self.detOffcenter,
                                          self.sid, self.sdd, self.imgDim, self.imgPixSize, self.imgRot, self.imgXCenter,
-                                         self.imgYCenter)
+                                         self.imgYCenter, self.fovCrop)
 
-    def backward(self, sinogram):
+    def backward(self, x):
         r"""Same as backprojection."""
-        return self.backprojection(sinogram)
+        return self.backprojection(x)
+
+
+class MangoFanbeamFpjLayer(torch.nn.Module):
+    def __init__(self, *cfg) -> None:
+        super().__init__()
+
+        self.fn = RadonForward.apply
+        self.cfg = cfg
+
+    def forward(self, x):
+        return self.fn(x, *self.cfg)
+
+
+class MangoFanbeamFbpLayer(torch.nn.Module):
+    def __init__(self, *cfg) -> None:
+        super().__init__()
+
+        self.fn = RadonBackprojection.apply
+        self.cfg = cfg
+
+    def forward(self, x):
+        return self.fn(x, *self.cfg)
