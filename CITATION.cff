@@ -1,0 +1,23 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: >-
+  torch-mando: Differentiable Domain Transform in
+  PyTorch based on MandoCT
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file.
+type: software
+authors:
+  - given-names: Yuchen
+    family-names: Lu
+    email: yclu@seu.edu.cn
+    affiliation: Southeast University
+  - given-names: Xu
+    family-names: Zhuo
+    email: zhuoxu@seu.edu.cn
+    affiliation: Southeast University
+url: 'https://github.com/CandleHouse/torch-mando'
+repository: 'https://github.com/CandleHouse/torch-mando'
+license: MIT
