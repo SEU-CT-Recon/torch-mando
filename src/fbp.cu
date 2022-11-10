@@ -397,7 +397,7 @@ void FilterSinogram_Agent(float *sgm, int batchsize, float *reconKernel, float *
 
     // intermidiate filtration result is saved in sgm_flt_ramp
     float *sgm_flt_ramp;
-    cudaMalloc(&sgm_flt_ramp, sgmWidth * views * sizeof(float));
+    cudaMalloc(&sgm_flt_ramp, sgmWidth * views * batchsize * sizeof(float));
     ConvolveSinogram_device<<<grid, block>>>(sgm_flt_ramp, sgm, reconKernel_ramp, sgmWidth,
                                              sgmHeight, views, u, detEltSize);
     cudaDeviceSynchronize();
