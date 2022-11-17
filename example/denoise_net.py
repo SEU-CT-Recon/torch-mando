@@ -8,7 +8,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch_mando import MandoFanbeamFbp, MandoFanbeamFpj, MandoConfig, KERNEL_RAMP, MandoFanbeamFbpLayer
+from torch_mando import MandoFanbeamFbp, MandoFanbeamFpj, MandoFanBeamConfig, KERNEL_RAMP, MandoFanbeamFbpLayer
 from torch.utils.data.dataset import Dataset
 from torch.utils.data import DataLoader
 from crip.io import listDirectory, imreadDicom, imwriteTiff, imreadTiff
@@ -23,8 +23,9 @@ imgPixelSize = 0.5
 imgDim = 512
 sid = 750
 sdd = 1250
-cfg = MandoConfig(sid, sdd, 0, totalAngle, views, 2, 0.2, views, detEleCount, imgDim, imgPixelSize, 0, 0, 0, True,
-                  KERNEL_RAMP, 0, detEleSize, 0)
+cfg = MandoFanBeamConfig(imgDim=imgDim, pixelSize=imgPixelSize, sid=sid, sdd=sdd, detEltCount=detEleCount,
+                         detEltSize=detEleSize, views=views, reconKernelEnum=KERNEL_RAMP, reconKernelParam=1,
+                         imgRot=0, detOffCenter=0, startAngle=0, totalScanAngle=totalAngle, fovCrop=False)
 
 dataDir = '...'
 noisyDir = '...'
