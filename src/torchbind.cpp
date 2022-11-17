@@ -11,7 +11,7 @@
   CHECK_CUDA(x);                                                                                   \
   CHECK_CONTIGUOUS(x)
 
-torch::Tensor fanbean_fpj(torch::Tensor x, float offcenter, float sid, float sdd, int views,
+torch::Tensor fanbeam_fpj(torch::Tensor x, float offcenter, float sid, float sdd, int views,
                           int detElementCount, float detEleSize, int oversample, float startAngle,
                           float totalScanAngle, int imgDim, float imgPixelSize, float fpjStepSize,
                           bool pmatrixFlag, torch::Tensor pmatrix_array, float pmatrix_eltsize, 
@@ -36,7 +36,7 @@ torch::Tensor fanbean_fpj(torch::Tensor x, float offcenter, float sid, float sdd
   return y;
 }
 
-torch::Tensor fanbean_fbp(torch::Tensor x, int sgmHeight, int sgmWidth, int views,
+torch::Tensor fanbeam_fbp(torch::Tensor x, int sgmHeight, int sgmWidth, int views,
                           int reconKernelEnum, float reconKernelParam, float totalScanAngle,
                           float detElementSize, float detOffCenter, float sid, float sdd,
                           int imgDim, float imgPixelSize, float imgRot, float imgXCenter, float imgYCenter, 
@@ -63,6 +63,6 @@ torch::Tensor fanbean_fbp(torch::Tensor x, int sgmHeight, int sgmWidth, int view
 }
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
-  m.def("forward", &fanbean_fpj, "Fan beam forward projection");
-  m.def("backward", &fanbean_fbp, "Fan beam back projection");
+  m.def("forward", &fanbeam_fpj, "Fan beam forward projection");
+  m.def("backward", &fanbeam_fbp, "Fan beam back projection");
 }

@@ -21,7 +21,8 @@ This library introduces **Differentiable Forward Projection (FPJ) and Filtered B
 - **Clone the repository**
 
   ```sh
-  git clone git@github.com:CandleHouse/torch-mando.git --depth 1
+  git clone https://github.com/CandleHouse/torch-mando.git --depth 1 # HTTPS
+  git clone git@github.com:CandleHouse/torch-mando.git --depth 1 # Or SSH
   cd torch-mando
   ```
 
@@ -46,11 +47,11 @@ Now support the following "parameter.jsonc" files to reduce the influence of geo
 ```python
 cfg = MandoFanBeamConfig(...)
 # add params file
-cfg.addPmatrixFile(read_paramsFile('./params/pmatrix_file.jsonc'), pmatrixDetEltSize=0.4)
-cfg.addSIDFile(read_paramsFile('./params/sid_file.jsonc'))
-cfg.addSDDFile(read_paramsFile('./params/sdd_file.jsonc'))
-cfg.addScanAngleFile(read_paramsFile('./params/scan_angle.jsonc'))
-cfg.addDetectorOffCenterFile(read_paramsFile('./params/offcenter_file.jsonc'))
+cfg.addPmatrixFile(readParamsFile('./params/pmatrix_file.jsonc'), pmatrixDetEltSize=0.4)
+cfg.addSIDFile(readParamsFile('./params/sid_file.jsonc'))
+cfg.addSDDFile(readParamsFile('./params/sdd_file.jsonc'))
+cfg.addScanAngleFile(readParamsFile('./params/scan_angle.jsonc'))
+cfg.addDetectorOffCenterFile(readParamsFile('./params/offcenter_file.jsonc'))
 ```
 
 ## Example
@@ -59,8 +60,7 @@ The main idea is to assemble a `Config` object which includes all necessary sett
 
 ```py
 cfg = MandoFanBeamConfig(imgDim=imgDim, pixelSize=imgPixelSize, sid=750, sdd=1250, detEltCount=detEleCount,
-                         detEltSize=detEleSize, views=views,reconKernelEnum=KERNEL_RAMP, reconKernelParam=1,
-                         fovCrop=False)
+                         detEltSize=detEleSize, views=views, reconKernelEnum=KERNEL_RAMP, reconKernelParam=1, fovCrop=False)
 # In your network
 # If you prefer nn.functional F style
 def forward(self, x):
@@ -77,7 +77,7 @@ View [example](./example) for code details.
 
 ## Declaration
 
-This work highly depends on previous works by [ustcfdm/mangoct](https://github.com/ustcfdm/mangoct), [njjixu/mangoct](https://gitee.com/njjixu/mangoct), [CandleHouse/mandoct](https://github.com/CandleHouse/mandoct), [matteo-ronchetti/torch-radon](https://github.com/matteo-ronchetti/torch-radon) and [z0gSh1u/torch-mango](https://github.com/z0gSh1u/torch-mango). This work draws lots of lessons from them. Thanks for their wonderful work.
+This work highly depends on previous works by [ustcfdm/mangoct](https://github.com/ustcfdm/mangoct), [njjixu/mangoct](https://gitee.com/njjixu/mangoct), [CandleHouse/mandoct](https://github.com/CandleHouse/mandoct) and [matteo-ronchetti/torch-radon](https://github.com/matteo-ronchetti/torch-radon). This work draws lots of lessons from them. Thanks for their wonderful work.
 
 ## Cite this
 

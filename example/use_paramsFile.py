@@ -9,7 +9,7 @@ def take(x):
     return x.detach().cpu().numpy()
 
 
-def read_paramsFile(path):
+def readParamsFile(path):
     with open(path, 'r') as f:
         file = json.loads(f.read())
     return torch.tensor(file['Value'])
@@ -27,11 +27,11 @@ cfg = MandoFanBeamConfig(imgDim=imgDim, pixelSize=imgPixelSize, sid=749.78, sdd=
                          detEltSize=detEleSize, views=views, reconKernelEnum=KERNEL_GAUSSIAN_RAMP, reconKernelParam=4, 
                          imgRot=0, detOffCenter=16.47, startAngle=0, totalScanAngle=totalAngle, fovCrop=False)
 # add params file
-cfg.addPmatrixFile(read_paramsFile('./params/pmatrix_file.jsonc'), pmatrixDetEltSize=0.4)
-cfg.addSIDFile(read_paramsFile('./params/sid_file.jsonc'))
-cfg.addSDDFile(read_paramsFile('./params/sdd_file.jsonc'))
-cfg.addScanAngleFile(read_paramsFile('./params/scan_angle.jsonc'))
-cfg.addDetectorOffCenterFile(read_paramsFile('./params/offcenter_file.jsonc'))
+cfg.addPmatrixFile(readParamsFile('./params/pmatrix_file.jsonc'), pmatrixDetEltSize=0.4)
+cfg.addSIDFile(readParamsFile('./params/sid_file.jsonc'))
+cfg.addSDDFile(readParamsFile('./params/sdd_file.jsonc'))
+cfg.addScanAngleFile(readParamsFile('./params/scan_angle.jsonc'))
+cfg.addDetectorOffCenterFile(readParamsFile('./params/offcenter_file.jsonc'))
 
 with torch.no_grad():
     sgm = torch.FloatTensor(np.array([sgm]))  # B, H, W

@@ -26,7 +26,7 @@ class MandoFanBeamConfig():
         self.oversampleSize = oversampleSize        # fpj
         self.fpjStepSize = fpjStepSize              # fpj
         self.fovCrop = fovCrop                      # fbp
-        self.checkParams_()
+        self._checkParams()
         # params file
         self.pmatrixFlag = False
         self.pmatrixFile = torch.empty(0)
@@ -42,7 +42,7 @@ class MandoFanBeamConfig():
         self.nonuniformOffCenter = False
         self.offCenterFile = torch.empty(0)
         
-    def checkParams_(self):
+    def _checkParams(self):
         assert self.imgDim > 0, "Image dimension must be positive."
         assert self.pixelSize > 0, "Pixel size must be positive."
         assert self.sid > 0, "Source to isocenter distance must be positive."

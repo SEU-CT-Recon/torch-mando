@@ -5,6 +5,7 @@
 #include <stdio.h>
 
 // Macro for checking cuda errors following a cuda launch or api call
+// https://gist.github.com/jefflarkin/5390993
 #define cudaCheckError()                                                                           \
   {                                                                                                \
     cudaError_t e = cudaGetLastError();                                                            \

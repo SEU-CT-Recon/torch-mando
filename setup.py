@@ -13,9 +13,9 @@ build(cc, nvcc='/usr/local/cuda/bin/nvcc')
 
 setup(
     name='torch_mando',
-    version="0.0.1",
+    version="1.0.0",
     author="CandleHouse",
-    author_email="769316285@qq.com",
+    author_email="yclu@seu.edu.cn",
     description="Differentiable Domain Transform in PyTorch based on MandoCT",
     url="https://github.com/CandleHouse/torch-mando",
     packages=['torch_mando'],

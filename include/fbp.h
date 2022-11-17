@@ -2,8 +2,6 @@
 #ifndef FBP_H
 #define FBP_H
 
-#include <string>
-
 void mandoCudaFbp(float *sgm, int batchsize, int sgmHeight, int sgmWidth, int views,
                   int reconKernelEnum, float reconKernelParam, float totalScanAngle,
                   float detElementSize, float detOffcenter, float sid, float sdd, int imgDim,
