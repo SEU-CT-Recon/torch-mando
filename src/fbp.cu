@@ -533,6 +533,8 @@ void mandoCudaFbp(float *sgm, int batchsize, int sgmHeight, int sgmWidth, int vi
   bool shortScan = 360.0f > abs(totalScanAngle);
   float *reconKernel = nullptr;
   Fbp_InitializeReconKernel_Agent(reconKernel, sgmWidth, detElementSize, reconKernelEnum, reconKernelParam);
+  // Make sure parameters are correct
+  cudaCheckError();
 
   float *sgm_device = nullptr;
   cudaMalloc(&sgm_device, SgmBytes);
@@ -564,4 +566,12 @@ void mandoCudaFbp(float *sgm, int batchsize, int sgmHeight, int sgmWidth, int vi
   Fbp_FreeMemory_Agent(filtered_sgm);
   Fbp_FreeMemory_Agent(sgm_device);
   Fbp_FreeMemory_Agent(img_device);
+  // Others parameters
+  Fbp_FreeMemory_Agent(pmatrix_array_device);
+  Fbp_FreeMemory_Agent(sidArray);
+  Fbp_FreeMemory_Agent(sdd_array);
+  Fbp_FreeMemory_Agent(offcenterArray);
+  Fbp_FreeMemory_Agent(beta);
+  Fbp_FreeMemory_Agent(u);
+  Fbp_FreeMemory_Agent(reconKernel);
 }

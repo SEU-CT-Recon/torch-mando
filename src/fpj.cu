@@ -362,7 +362,7 @@ void mandoCudaFpj(float *img, int batchsize, float offcenter, float sid, float s
         cudaMemcpy(&pmatrix_array_device[12*i + 0], &pmatrix[0], 2 * sizeof(float), cudaMemcpyDeviceToDevice);
         cudaMemcpy(&pmatrix_array_device[12*i + 8], &pmatrix[2], 2 * sizeof(float), cudaMemcpyDeviceToDevice);
     }
-    cudaFree(pmatrix);
+    Fpj_FreeMemory_Agent(pmatrix);
   }
 
   // SID
@@ -408,6 +408,8 @@ void mandoCudaFpj(float *img, int batchsize, float offcenter, float sid, float s
   // Others
   float *u = nullptr;
   Fpj_InitializeU_Agent(u, detElementCount * oversample, detEleSize / (float)oversample, offcenter);
+  // Make sure parameters are correct
+  cudaCheckError();
 
   float *sgm_large = nullptr;
   cudaMalloc(&sgm_large, SgmBytes * oversample);
@@ -432,4 +434,11 @@ void mandoCudaFpj(float *img, int batchsize, float offcenter, float sid, float s
   Fpj_FreeMemory_Agent(img_device);
   Fpj_FreeMemory_Agent(sgm_device);
   Fpj_FreeMemory_Agent(sgm_large);
+  // Others parameters
+  Fpj_FreeMemory_Agent(pmatrix_array_device);
+  Fpj_FreeMemory_Agent(sidArray);
+  Fpj_FreeMemory_Agent(sdd_array);
+  Fpj_FreeMemory_Agent(offcenterArray);
+  Fpj_FreeMemory_Agent(beta);
+  Fpj_FreeMemory_Agent(u);
 }
