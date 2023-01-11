@@ -569,7 +569,7 @@ void mandoCudaFbp(float *sgm, int batchsize, int sgmHeight, int sgmWidth, int vi
   // Others parameters
   Fbp_FreeMemory_Agent(pmatrix_array_device);
   Fbp_FreeMemory_Agent(sidArray);
-  Fbp_FreeMemory_Agent(sdd_array);
+  Fbp_FreeMemory_Agent(sddArray);
   Fbp_FreeMemory_Agent(offcenterArray);
   Fbp_FreeMemory_Agent(beta);
   Fbp_FreeMemory_Agent(u);

@@ -437,7 +437,7 @@ void mandoCudaFpj(float *img, int batchsize, float offcenter, float sid, float s
   // Others parameters
   Fpj_FreeMemory_Agent(pmatrix_array_device);
   Fpj_FreeMemory_Agent(sidArray);
-  Fpj_FreeMemory_Agent(sdd_array);
+  Fpj_FreeMemory_Agent(sddArray);
   Fpj_FreeMemory_Agent(offcenterArray);
   Fpj_FreeMemory_Agent(beta);
   Fpj_FreeMemory_Agent(u);
