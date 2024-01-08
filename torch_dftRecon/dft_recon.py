@@ -2,6 +2,7 @@ import torch
 from torch_mando import *
 import torch.nn as nn
 import torch.nn.functional as F
+import numpy as np
 
 
 class DFTParallelRecon_diff(nn.Module):
@@ -23,12 +24,12 @@ class DFTParallelRecon_diff(nn.Module):
     
         return rec.reshape(B, C, self.M, self.M)
         
-    def dft_recon(self, sgm: torch.tensor, N: int, a: float, FN: int, FM: int, M: int, V: int):
+    def dft_recon(self, sgm: torch.Tensor, N: int, a: float, FN: int, FM: int, M: int, V: int):
         ### 1. sgm-1D dft
         R_k = torch.zeros((self.V, self.FN), dtype=torch.complex64).cuda()
         for j in range(V):
             R_k[j] = self.fft_trans(sgm[j, ...], a, N, FN)
-        
+
         ### 1.1 sgm-1D dft filter, gaussianApodizedRamp freq domain
         if self.cfg.reconKernelEnum == KERNEL_GAUSSIAN_RAMP:
             R_k = self.fft_sgm_filter(R_k, a, self.cfg.reconKernelParam, FN)
@@ -64,26 +65,30 @@ class DFTParallelRecon_diff(nn.Module):
         
         return f_n.real.to(torch.float32)
     
-    def fft_trans(self, R: torch.tensor, a: float, N: int, FN: int):
+    def fft_trans(self, R: torch.Tensor, a: float, N: int, FN: int):
         fm = R
         delta_x = a
         delta_k = 1 / (FN * delta_x)
         x_0 = - (N-1) / 2 * delta_x
         k_0 = - (FN-1) / 2 * delta_k
-        m = torch.arange(N).cuda()
-        n = torch.arange(FN).cuda()
+        m = np.arange(N)
+        n = np.arange(FN)
         
-        gm = fm * torch.exp(-1j * 2 * torch.pi * k_0 * delta_x * m)
+        # use numpy.exp to avoid numerical error
+        s1 = torch.from_numpy(np.exp(-1j * 2 * np.pi * k_0 * delta_x * m)).cuda()
+        s2 = torch.from_numpy(np.exp(-1j * 2 * np.pi * x_0 * (delta_k * n + k_0))).cuda()
+        
+        gm = fm * s1
         gn = torch.fft.fft(gm, n=FN, norm='backward')
-        return delta_x * torch.exp(-1j * 2 * torch.pi * x_0 * (delta_k * n + k_0)) * gn
+        return delta_x * s2 * gn
 
-    def fft_sgm_filter(self, R: torch.tensor, a: float, sigma: float, FN: int):
+    def fft_sgm_filter(self, R: torch.Tensor, a: float, sigma: float, FN: int):
         fm = R
         n = (torch.arange(FN).cuda() - (FN-1) / 2) / (FN * a)
         kernel = torch.exp(-2 * torch.pi**2 * sigma**2 * a**2 * n**2)
         return kernel * fm
         
-    def fft2_trans(self, fm2: torch.tensor, delta_x: float, FM: int):
+    def fft2_trans(self, fm2: torch.Tensor, delta_x: float, FM: int):
         delta_k = 1 / (FM * delta_x)
         delta_kx = delta_ky = delta_k
         x_0 = y_0 = - (FM-1) / 2 * delta_x
