@@ -221,7 +221,6 @@ class MandoFanbeamFbpLayerNext(torch.nn.Module):
 
         if cfg.reconKernelEnum == KERNEL_HAMMING:
             raise NotImplementedError('Hamming filter is not implemented yet. If you use Ramp filter, please set reconKernelEnum to `KERNEL_RAMP`.')
-        
 
     def forward(self, x):
         for f in self.filters:
