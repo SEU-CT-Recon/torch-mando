@@ -16,7 +16,8 @@ except Exception as e:
 __version__ = "0.0.1"
 __all__ = [
     'MandoFanbeamFpj', 'MandoFanbeamFbp', 'MandoFanbeamFpjLayer', 'MandoFanbeamFbpLayer', 
-    'MandoFanBeamConfig', 'KERNEL_NONE', 'KERNEL_RAMP', 'KERNEL_HAMMING', 'KERNEL_GAUSSIAN_RAMP'
+    'MandoFanBeamConfig', 'KERNEL_NONE', 'KERNEL_RAMP', 'KERNEL_HAMMING', 'KERNEL_GAUSSIAN_RAMP',
+    'MandoFanbeamFbpLayerNext'
 ]
 
 KERNEL_NONE = 0
@@ -207,7 +208,10 @@ class MandoFanbeamFbpLayerNext(torch.nn.Module):
         if cfg.reconKernelEnum == KERNEL_HAMMING:
             raise NotImplementedError('Hamming filter is not implemented yet. If you use Ramp filter, please set reconKernelEnum to `KERNEL_RAMP`.')
         
-        self.cfg = { **cfg, 'reconKernelEnum': KERNEL_NONE, 'reconKernelParam': 0 }
+        # self.cfg = { **cfg, 'reconKernelEnum': KERNEL_NONE, 'reconKernelParam': 0 }
+        self.cfg = cfg.copy()
+        self.cfg.reconKernelEnum = KERNEL_NONE
+        self.cfg.reconKernelParam = 0
 
     def forward(self, x):
         for f in self.filters:
