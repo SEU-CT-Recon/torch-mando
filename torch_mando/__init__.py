@@ -13,10 +13,11 @@ except Exception as e:
 
 
 
-__version__ = "0.0.1"
+__version__ = "1.0.1"
 __all__ = [
     'MandoFanbeamFpj', 'MandoFanbeamFbp', 'MandoFanbeamFpjLayer', 'MandoFanbeamFbpLayer', 
-    'MandoFanBeamConfig', 'KERNEL_NONE', 'KERNEL_RAMP', 'KERNEL_HAMMING', 'KERNEL_GAUSSIAN_RAMP'
+    'MandoFanBeamConfig', 'KERNEL_NONE', 'KERNEL_RAMP', 'KERNEL_HAMMING', 'KERNEL_GAUSSIAN_RAMP',
+    'MandoFanbeamFbpLayerNext'
 ]
 
 KERNEL_NONE = 0
@@ -121,22 +122,20 @@ class MandoFanbeamFpjLayer(torch.nn.Module):
     def __init__(self, cfg: MandoFanBeamConfig) -> None:
         super().__init__()
 
-        self.fn = FanBeamFPJ.apply
         self.cfg = cfg
 
     def forward(self, x):
-        return self.fn(x, self.cfg)
+        return MandoFanbeamFpj(x, self.cfg)
 
 
 class MandoFanbeamFbpLayer(torch.nn.Module):
     def __init__(self, cfg: MandoFanBeamConfig) -> None:
         super().__init__()
 
-        self.fn = FanBeamFBP.apply
         self.cfg = cfg
 
     def forward(self, x):
-        return self.fn(x, self.cfg)
+        return MandoFanbeamFbp(x, self.cfg)
     
 
 def zxInitRampFilter(N, du):
@@ -189,13 +188,29 @@ def zxFilterSinogram(sgm, reconKernel, du):
     return res.view(oldShape)
 
 
+class NoneKernel():
+
+    def __init__(self, cfg):
+        self.cfg = cfg
+        self.prevReconKerenelEnum = cfg.reconKernelEnum
+        self.prevReconKernelParam = cfg.reconKernelParam
+
+    def __enter__(self):
+        self.cfg.reconKernelEnum = KERNEL_NONE
+        self.cfg.reconKernelParam = 0
+
+    def __exit__(self, *args, **kwargs):
+        self.cfg.reconKernelEnum = self.prevReconKerenelEnum
+        self.cfg.reconKernelParam = self.prevReconKernelParam
+
+
 class MandoFanbeamFbpLayerNext(torch.nn.Module):
 
     def __init__(self, cfg: MandoFanBeamConfig) -> None:
         super().__init__()
 
-        self.fn = FanBeamFBP.apply
         self.filters = []
+        self.cfg = cfg
 
         if cfg.reconKernelEnum == KERNEL_GAUSSIAN_RAMP:
             self.filters.append(zxInitGaussianFilter(cfg.detEltCount, cfg.reconKernelParam))
@@ -207,10 +222,12 @@ class MandoFanbeamFbpLayerNext(torch.nn.Module):
         if cfg.reconKernelEnum == KERNEL_HAMMING:
             raise NotImplementedError('Hamming filter is not implemented yet. If you use Ramp filter, please set reconKernelEnum to `KERNEL_RAMP`.')
         
-        self.cfg = { **cfg, 'reconKernelEnum': KERNEL_NONE, 'reconKernelParam': 0 }
 
     def forward(self, x):
         for f in self.filters:
             x = zxFilterSinogram(x, f, self.cfg.detEltSize)
 
-        return self.fn(x, self.cfg)
+        with NoneKernel(self.cfg):
+            x = MandoFanbeamFbp(x, self.cfg)
+        
+        return x
