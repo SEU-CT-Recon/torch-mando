@@ -11,7 +11,8 @@ except Exception as e:
     print(e)
     exit(1)
 
-
+import warnings
+warnings.filterwarnings('ignore', message="Using padding='same' with even kernel lengths and odd dilation may require a zero-padded copy of the input be created")
 
 __version__ = "1.0.1"
 __all__ = [
@@ -159,7 +160,7 @@ def zxInitGaussianFilter(N, sigma, du):
     gaussianFilter = torch.zeros((N), dtype=torch.float32)
     center = N // 2 - 1
     for i in range(N):
-        gaussianFilter[i] = torch.exp(-(i - center) ** 2 / (2 * sigma ** 2))
+        gaussianFilter[i] = torch.exp(torch.ones(1, dtype=torch.float32) * -(i - center) ** 2 / (2 * sigma ** 2))
 
     return gaussianFilter / torch.sum(gaussianFilter) / du # /du to cancel out the *du in zxFilterSinogram
         
@@ -213,7 +214,7 @@ class MandoFanbeamFbpLayerNext(torch.nn.Module):
         self.cfg = cfg
 
         if cfg.reconKernelEnum == KERNEL_GAUSSIAN_RAMP:
-            self.filters.append(zxInitGaussianFilter(cfg.detEltCount, cfg.reconKernelParam))
+            self.filters.append(zxInitGaussianFilter(cfg.detEltCount, cfg.reconKernelParam, cfg.detEltSize))
             self.filters.append(zxInitRampFilter(cfg.detEltCount, cfg.detEltSize))
             
         if cfg.reconKernelEnum == KERNEL_RAMP:
@@ -221,6 +222,7 @@ class MandoFanbeamFbpLayerNext(torch.nn.Module):
 
         if cfg.reconKernelEnum == KERNEL_HAMMING:
             raise NotImplementedError('Hamming filter is not implemented yet. If you use Ramp filter, please set reconKernelEnum to `KERNEL_RAMP`.')
+        
 
     def forward(self, x):
         for f in self.filters:
