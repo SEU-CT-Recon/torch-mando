@@ -206,7 +206,10 @@ class NoneKernel():
 
 
 class MandoFanbeamFbpLayerNext(torch.nn.Module):
-
+    ''' [Experimental] [Warning] Parker weighting and weighting for fan beam compared with parallel beam are not extracted
+        and may result in inaccuracy.
+    '''
+    
     def __init__(self, cfg: MandoFanBeamConfig) -> None:
         super().__init__()
 
