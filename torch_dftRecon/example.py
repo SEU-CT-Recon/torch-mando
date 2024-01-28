@@ -2,7 +2,7 @@ import torch.nn as nn
 import torch
 from torch_mando import *
 import torch.nn.functional as F
-from dft_recon import DFTParallelRecon_diff
+from dft_recon import ParallelbeamDFTReconLayer
 import tifffile
 import numpy as np
 from crip.io import imwriteTiff, imreadRaw
@@ -31,7 +31,7 @@ if __name__ == '__main__':
 
     x = torch.FloatTensor(sgm_parallel).unsqueeze(0).unsqueeze(0).to(device)
     y = torch.FloatTensor(sgm).unsqueeze(0).unsqueeze(0).to(device)
-    dftRecon = DFTParallelRecon_diff(cfg).to(device)
+    dftRecon = ParallelbeamDFTReconLayer(cfg).to(device)
     with torch.no_grad():
         output_dft = dftRecon(x).detach().cpu().numpy()
         output_fbp = MandoFanbeamFbp(y, cfg).detach().cpu().numpy()

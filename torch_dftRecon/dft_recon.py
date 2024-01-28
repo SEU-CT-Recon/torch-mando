@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-class DFTParallelRecon_diff(nn.Module):
+class ParallelbeamDFTReconLayer(nn.Module):
     def __init__(self, cfg: MandoFanBeamConfig) -> None:
         super().__init__()
         self.cfg = cfg
