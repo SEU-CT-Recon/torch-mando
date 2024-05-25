@@ -8,7 +8,7 @@ This library introduces **Differentiable Forward Projection (FPJ) and Filtered B
 
 **Now support:**
 
-- equidistant Fan-beam
+- equidistant fan-beam
 - geometric calibration
 
 ## Installation
@@ -21,8 +21,7 @@ This library introduces **Differentiable Forward Projection (FPJ) and Filtered B
 - **Clone the repository**
 
   ```sh
-  git clone https://github.com/CandleHouse/torch-mando.git --depth 1 # HTTPS
-  git clone git@github.com:CandleHouse/torch-mando.git --depth 1 # Or SSH
+  git clone git@github.com:CandleHouse/torch-mando.git --depth 1
   cd torch-mando
   ```
 
@@ -77,7 +76,7 @@ View [example](./example) for code details.
 
 ## Declaration
 
-This work highly depends on previous works by [ustcfdm/mangoct](https://github.com/ustcfdm/mangoct), [njjixu/mangoct](https://gitee.com/njjixu/mangoct), [CandleHouse/mandoct](https://github.com/CandleHouse/mandoct) and [matteo-ronchetti/torch-radon](https://github.com/matteo-ronchetti/torch-radon). This work draws lots of lessons from them. Thanks for their wonderful work.
+This work highly depends on previous works by [ustcfdm/mangoct](https://github.com/ustcfdm/mangoct), [njjixu/mangoct](https://gitee.com/njjixu/mangoct), [SEU-CT-Recon/mandoct](https://github.com/SEU-CT-Recon/mandoct) and [matteo-ronchetti/torch-radon](https://github.com/matteo-ronchetti/torch-radon). This work draws lots of lessons from them. Thanks for their wonderful work.
 
 ## Cite this
 
@@ -85,10 +84,10 @@ Please use the following BibTex to cite this work, or click *Cite this repositor
 
 ```
 @software{torch_mando,
-  author = {Lu, Yuchen and Zhuo, Xu},
+  author = {SEU-CT-Recon},
   license = {MIT},
   title = {torch-mando: Differentiable Domain Transform in PyTorch based on MandoCT},
-  url = {https://github.com/CandleHouse/torch-mando}
+  url = {https://github.com/SEU-CT-Recon/torch-mando}
 }
 ```
 
