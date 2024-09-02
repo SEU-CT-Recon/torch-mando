@@ -106,6 +106,7 @@ void Fpj_InitializeBeta_Agent(float *&beta, const int V, const float startAngle,
 __global__ void ForwardProjectionBilinear_device(float *img, int batchsize, float *sgm,
                                                  const float *u, const float *offcenter_array,
                                                  const float *beta, int M, int N, int V, float dx,
+                                                 float xCenter, float yCenter, bool curvedDetector,
                                                  const float *sid_array, const float *sdd_array,
                                                  float fpjStepSize) {
   int col = threadIdx.x + blockDim.x * blockIdx.x; // column is direction of elements
@@ -124,8 +125,16 @@ __global__ void ForwardProjectionBilinear_device(float *img, int batchsize, floa
     // calculate offcenter bias
     float offcenter_bias = offcenter_array[row] - offcenter_array[0];
     // current detector element position
-    float xd = -(sdd - sid) * cosf(beta[row]) + (u[col] + offcenter_bias) * cosf(beta[row] - PI / 2.0f);
-    float yd = -(sdd - sid) * sinf(beta[row]) + (u[col] + offcenter_bias) * sinf(beta[row] - PI / 2.0f);
+		float xd, yd;
+		if (curvedDetector) {
+			float gamma_prime = (u[col] + offcenter_bias) / sdd;
+			xd = -sdd * cos(beta[row] + gamma_prime) + sid * cos(beta[row]);
+			yd = -sdd * sin(beta[row] + gamma_prime) + sid * sin(beta[row]);
+		}
+		else {
+			xd = -(sdd - sid) * cosf(beta[row]) + (u[col] + offcenter_bias) * cosf(beta[row] - PI / 2.0f);
+			yd = -(sdd - sid) * sinf(beta[row]) + (u[col] + offcenter_bias) * sinf(beta[row] - PI / 2.0f);
+		}
     // step point region
     float L_min = sid - sqrt(2 * D * D);
     float L_max = sid + sqrt(2 * D * D);
@@ -138,8 +147,8 @@ __global__ void ForwardProjectionBilinear_device(float *img, int batchsize, floa
     // weighting factor for linear interpolation
     float wx, wy;
     // the most upper left image pixel position
-    float x0 = -D + dx / 2.0f;
-    float y0 = D - dx / 2.0f;
+		float x0 = -D + dx / 2.0f - xCenter;
+		float y0 = D - dx / 2.0f - yCenter;
     sgm[batch * N * V + row * N + col] = 0;
 
     // calculate line integration
@@ -292,15 +301,17 @@ void ForwardProjectionBilinear_Agent(float *&image, int batchsize, const float *
                                      const float *sdd_array, const float *offcenter_array,
                                      const float *u, const float *beta, int detEltCount, float detEltSize,
                                      int oversampleSize, int views, int imgDim, float pixelSize,
-                                     float fpjStepSize, bool pmatrixFlag, const float *pmatrix_array,
-                                     float pmatrix_eltsize, float *&sinogram) {
+                                     float imgXCenter, float imgYCenter, float fpjStepSize, bool curvedDetector,
+                                     bool pmatrixFlag, const float *pmatrix_array, float pmatrix_eltsize, 
+                                     float *&sinogram) {
   dim3 grid((detEltCount * oversampleSize + 7) / 8, (views + 7) / 8, batchsize);
   dim3 block(8, 8, 1);
 
   if (pmatrixFlag == false)  // if pmatrix is not applied
     ForwardProjectionBilinear_device<<<grid, block>>>(image, batchsize, sinogram, u, offcenter_array, 
                                                       beta, imgDim, detEltCount * oversampleSize,
-                                                      views, pixelSize, sid_array, sdd_array, fpjStepSize);
+                                                      views, pixelSize, imgXCenter, imgYCenter, curvedDetector,
+                                                      sid_array, sdd_array, fpjStepSize);
   else  // if pmatrix is applied
     ForwardProjectionBilinear_pmatrix_device<<<grid, block>>>(image, batchsize, sinogram, u, pmatrix_array, 
                                                               beta, imgDim, detEltCount * oversampleSize,
@@ -329,11 +340,15 @@ void Fpj_FreeMemory_Agent(float *&p) {
 /**
  * This is the very main.
  */
-void mandoCudaFpj(float *img, int batchsize, float offcenter, float sid, float sdd, int views,
-                  int detElementCount, float detEleSize, int oversample, float startAngle,
-                  float totalScanAngle, int imgDim, float imgPixelSize, float fpjStepSize,
+void mandoCudaFpj(float *img, int batchsize, float sid, float sdd, int views,
+                  int detElementCount, float detEleSize,
+                  int imgDim, float imgPixelSize,
+                  float startAngle, float totalScanAngle,
+                  float offcenter, float imgXCenter, float imgYCenter,
+                  float fpjStepSize, int oversample, bool curvedDetector,
                   bool pmatrixFlag, float *pmatrix_array, float pmatrix_eltsize, 
-                  bool nonuniformSID, float *sid_array, bool nonuniformSDD, float *sdd_array,
+                  bool nonuniformSID, float *sid_array, 
+                  bool nonuniformSDD, float *sdd_array,
                   bool nonuniformScanAngle, float *scan_angle_array,
                   bool nonuniformOffCenter, float *offcenter_array, 
                   float *sgm) {
@@ -421,8 +436,8 @@ void mandoCudaFpj(float *img, int batchsize, float offcenter, float sid, float s
 
   ForwardProjectionBilinear_Agent(img_device, batchsize, sidArray, sddArray, offcenterArray, u,
                                   beta, detElementCount, detEleSize, oversample, views, imgDim, 
-                                  imgPixelSize, fpjStepSize, pmatrixFlag, pmatrix_array_device, 
-                                  pmatrix_eltsize, sgm_large);
+                                  imgPixelSize, imgXCenter, imgYCenter, fpjStepSize, curvedDetector,
+                                  pmatrixFlag, pmatrix_array_device, pmatrix_eltsize, sgm_large);
   cudaCheckError();
 
   BinSinogram(sgm_large, batchsize, detElementCount, views, oversample, sgm_device);

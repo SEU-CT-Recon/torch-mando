@@ -3,14 +3,16 @@
     "${workspaceRoot}/include",
     "D:/MedRecon/libtorch-win-shared-with-deps-debug-1.12.1+cu116/libtorch/include",
     "D:/MedRecon/libtorch-win-shared-with-deps-debug-1.12.1+cu116/libtorch/include/torch/csrc/api/include",
+    "D:/AppGallery/NVIDIA CUDA/include"
   ],
   "files.associations": {
     "*.wxml": "html",
     "*.wxss": "css",
-    "*.cu": "cuda-cpp",
+    "*.cu": "cpp",
     "*.cuh": "cpp",
     "cmath": "cpp",
     "random": "cpp",
-    "valarray": "cpp"
+    "valarray": "cpp",
+    "chrono": "cpp"
   }
 }
