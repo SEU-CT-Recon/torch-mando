@@ -5,7 +5,7 @@ class MandoFanBeamConfig():
     def __init__(self, imgDim: int, pixelSize: float, sid: float, sdd: float, detEltCount: int, detEltSize: float, views: int,
                  reconKernelEnum: str, reconKernelParam: float, imgRot: float=0, imgXCenter: float=0, imgYCenter: float=0,
                  startAngle: float=0, totalScanAngle: float=360, detOffCenter: float=0, oversampleSize: int=2, 
-                 fpjStepSize: float=0.2, fovCrop: bool=False):
+                 fpjStepSize: float=0.2, curvedDetector: bool=False, fovCrop: bool=False):
         self.imgDim = imgDim                        # fpj & fbp
         self.pixelSize = pixelSize                  # fpj & fbp
         self.sid = sid                              # fpj & fbp
@@ -18,13 +18,14 @@ class MandoFanBeamConfig():
         self.reconKernelEnum = reconKernelEnum      # fbp
         self.reconKernelParam = reconKernelParam    # fbp
         self.imgRot = imgRot                        # fbp
-        self.imgXCenter = imgXCenter                # fbp
-        self.imgYCenter = imgYCenter                # fbp
+        self.imgXCenter = imgXCenter                # fpj & fbp
+        self.imgYCenter = imgYCenter                # fpj & fbp
         self.startAngle = startAngle                # fpj
         self.totalScanAngle = totalScanAngle        # fpj & fbp
         self.detOffCenter = detOffCenter            # fpj & fbp
         self.oversampleSize = oversampleSize        # fpj
         self.fpjStepSize = fpjStepSize              # fpj
+        self.curvedDetector = curvedDetector        # fpj & fbp
         self.fovCrop = fovCrop                      # fbp
         self._checkParams()
         # params file
@@ -53,6 +54,7 @@ class MandoFanBeamConfig():
 
         assert isinstance(self.oversampleSize, int), "Oversample size must be int."
         assert self.fpjStepSize > 0, "FPJ step size must be positive."
+        assert self.curvedDetector in [True, False], "Curved detector must be bool."
         assert self.fovCrop in [True, False], "FOV crop must be bool."
     
     def addPmatrixFile(self, array: torch.Tensor, pmatrixDetEltSize: float=-1):

@@ -26,7 +26,7 @@ __global__ void Fbp_InitBeta(float *beta, const int V, const float rotation,
 }
 
 __global__ void InitReconKernel_Hamming(float *reconKernel, const int N, const float du,
-                                        const float t) {
+                                        const float t, bool curvedDetector, float sdd) {
   int tid = threadIdx.x + blockDim.x * blockIdx.x;
   if (tid < 2 * N - 1) {
     // the center element index is N-1
@@ -37,8 +37,13 @@ __global__ void InitReconKernel_Hamming(float *reconKernel, const int N, const f
       reconKernel[tid] = t / (4 * du * du);
     else if (n % 2 == 0)
       reconKernel[tid] = 0;
-    else
-      reconKernel[tid] = -t / (n * n * PI * PI * du * du);
+    else {
+			// the weighting for curved detector and flat panel detector is different 
+			if (curvedDetector)
+				reconKernel[tid] = -t / (PI * PI * sdd * sdd * sin(float(n) * du / sdd) * sin(float(n) * du / sdd));
+			else
+				reconKernel[tid] = -t / (n * n * PI * PI * du * du);
+		}
 
     // cosine part
     int sgn = n % 2 == 0 ? 1 : -1;
@@ -84,7 +89,8 @@ __global__ void InitReconKernel_GaussianApodized(float *reconKernel, const int N
 */
 __global__ void WeightSinogram_device(float *sgm, const float *u, const int N, const int H,
                                       const int V, float *sdd_array, float totalScanAngle,
-                                      bool shortScan, float *beta_array, float *offcenter_array) {
+                                      bool shortScan, float *beta_array, float *offcenter_array,
+                                      bool curvedDetector) {
   int col = threadIdx.x + blockDim.x * blockIdx.x;
   int row = threadIdx.y + blockDim.y * blockIdx.y;
   int batch = threadIdx.z + blockDim.z * blockIdx.z;
@@ -94,25 +100,51 @@ __global__ void WeightSinogram_device(float *sgm, const float *u, const int N, c
     float u_actual = u[col] + offcenter_bias; // actual u value due to non uniform offcenter
 
     float sdd = sdd_array[row];
-    sgm[batch * N * H + row * N + col] *= sdd * sdd / sqrtf((u_actual) * (u_actual) + sdd * sdd);
+    // for curved detector or flat panel detector, the function to calculate cos gamma is different
+    if (curvedDetector)
+      sgm[batch * N * H + row * N + col] *= sdd * cos(u_actual / sdd) * sdd / sqrtf(sdd * sdd);
+    else
+      sgm[batch * N * H + row * N + col] *= sdd * sdd / sqrtf((u_actual) * (u_actual) + sdd * sdd);
 
     if (shortScan) {
+      // for scans longer than 360 degrees but not muliples of 360, we also need to apply parker weighting
+			// for example, for a 600 degrees scan, we also need to apply parker weighting
+			uint64_t num_rounds = floorf(abs(totalScanAngle) / 360.0f);
+			float remain_angle = abs(totalScanAngle) - num_rounds * 360.0f;
+
       float beta = abs(beta_array[row] - beta_array[0]);
       float rotation_direction = abs(totalScanAngle) / (totalScanAngle);
-      float gamma = atan(u_actual / sdd) * rotation_direction;
-      float gamma_max = abs(totalScanAngle) * PI / 180.0f - PI;
+      float gamma;
+      // for curved detector or flat panel detector, the function to calculate gamma is different
+			if (curvedDetector)
+				gamma = (u_actual / sdd) * rotation_direction;
+			else
+				gamma = atan(u_actual / sdd) * rotation_direction;
 
-      // calculation of the parker weighting
-      float weighting = 0;
-      if (beta >= 0 && beta < gamma_max - 2 * gamma) {
-        weighting = sin(PI / 2 * beta / (gamma_max - 2 * gamma));
-        weighting = weighting * weighting;
-      } else if (beta >= gamma_max - 2 * gamma && beta < PI - 2 * gamma) {
-        weighting = 1;
-      } else if (beta >= PI - 2 * gamma && beta <= PI + gamma_max) {
-        weighting = sin(PI / 2 * (PI + gamma_max - beta) / (gamma_max + 2 * gamma));
-        weighting = weighting * weighting;
-      }
+			float gamma_max = remain_angle * PI / 180.0f - PI;// maximum gamma defined by remain angle
+
+      //calculation of the parker weighting
+			float weighting = 0;
+			if (remain_angle > 180.0f) {//remain angle is larger than 180 degrees, need to apply parker weighting
+				if (beta >= 0 && beta < gamma_max - 2 * gamma) {
+					weighting = sin(PI / 2 * beta / (gamma_max - 2 * gamma));
+					weighting = weighting * weighting;
+				}
+				else if (beta >= gamma_max - 2 * gamma && beta < PI * (2 * num_rounds + 1) - 2 * gamma) {
+					weighting = 1;
+				}
+				else if (beta >= PI * (2 * num_rounds + 1) - 2 * gamma && beta <= PI * (2 * num_rounds + 1) + gamma_max) {
+					weighting = sin(PI / 2 * (PI + gamma_max - (beta - PI * 2 * num_rounds)) / (gamma_max + 2 * gamma));
+					weighting = weighting * weighting;
+				}
+				else {
+					//printf("ERROR!");
+				}
+			}
+			else {//remain angle is less than 180 degree, need to apply a different weighting
+				weighting = 1;// This weighting has not been fully investigated;
+			}
+
       sgm[batch * N * H + row * N + col] *= weighting;
     }
   }
@@ -187,7 +219,8 @@ __global__ void BackprojectPixelDriven_device(float *sgm, float *u, float *beta,
                                               const int N, const int V, const int M,
                                               float *sdd_array, float *sid_array,
                                               float *offcenter_array, const float dx,
-                                              const float xc, const float yc, float *img) {
+                                              const float xc, const float yc, bool curvedDetector,
+                                              float *img) {
   int col = threadIdx.x + blockDim.x * blockIdx.x;
   int row = threadIdx.y + blockDim.y * blockIdx.y;
   int batch = threadIdx.z + blockDim.z * blockIdx.z;
@@ -202,6 +235,7 @@ __global__ void BackprojectPixelDriven_device(float *sgm, float *u, float *beta,
     float w;
     int k;
     float delta_beta;    // delta_beta for the integral calculation (nonuniform scan angle)
+    float total_scan_angle = abs((beta[V - 1] - beta[0])) / float(V - 1) * float(V);
     float img_local = 0; // temporary local variable to speed up
 
     for (int view = 0; view < V; view++) {
@@ -221,8 +255,11 @@ __global__ void BackprojectPixelDriven_device(float *sgm, float *u, float *beta,
       // calculate the magnification
       mag_factor = sdd / U;
 
-      // find u0
-      u0 = mag_factor * (x * sinf(beta[view]) - y * cosf(beta[view]));
+      // find u0 
+      if (curvedDetector)
+        u0 = sdd * atan((x * sinf(beta[view]) - y * cosf(beta[view])) / U);
+      else
+        u0 = mag_factor * (x * sinf(beta[view]) - y * cosf(beta[view]));
 
       k = floorf((u0 - (u[0] + offcenter_bias)) / du);
       if (k < 0 || k + 1 > N - 1) {
@@ -232,17 +269,25 @@ __global__ void BackprojectPixelDriven_device(float *sgm, float *u, float *beta,
 
       w = (u0 - (u[k] + offcenter_bias)) / du;
 
+      float distance_weight = 0;
+      if (curvedDetector)
+        distance_weight = 1 / (U * U + (x * sinf(beta[view]) - y * cosf(beta[view])) * (x * sinf(beta[view]) - y * cosf(beta[view])));
+      else
+        distance_weight = 1 / (U * U);
+
       // Dont consider cone-beam.
-      img_local += sid / U / U *
+      img_local += sid * distance_weight *
                    (w * sgm[batch * N * V + view * N + k + 1] +
-                    (1 - w) * sgm[batch * N * V + view * N + k]) *
+                   (1 - w) * sgm[batch * N * V + view * N + k]) *
                    delta_beta;
     }
 
-    if (shortScan) {
-      img[batch * M * M + row * M + col] = img_local;
-    } else
-      img[batch * M * M + row * M + col] = img_local / 2.0f;
+    //judge whether the scan is a full scan or a short scan
+    uint64_t num_rounds = floorf((abs(total_scan_angle) + 0.001f) / (2 * PI));
+    if (shortScan)
+      img[batch * M * M + row * M + col] = img_local / float(2 * num_rounds + 1.0f);
+    else
+      img[batch * M * M + row * M + col] = img_local / float(2 * num_rounds);
   }
 }
 
@@ -351,7 +396,8 @@ void Fbp_InitializeBeta_Agent(float *&beta, const int V, const float rotation,
 }
 
 void Fbp_InitializeReconKernel_Agent(float *&reconKernel, const int N, const float du,
-                                     int kernelEnum, float kernelParam) {
+                                     int kernelEnum, float kernelParam, 
+                                     bool curvedDetector, float sdd) {
   if (reconKernel != nullptr) {
     cudaFree(reconKernel);
   }
@@ -359,12 +405,11 @@ void Fbp_InitializeReconKernel_Agent(float *&reconKernel, const int N, const flo
   cudaMalloc(&reconKernel, (2 * N - 1) * sizeof(float));
 
   if (kernelEnum == KERNEL_RAMP) {
-    InitReconKernel_Hamming<<<(2 * N - 1 + 511) / 512, 512>>>(reconKernel, N, du, 1.0f);
+    InitReconKernel_Hamming<<<(2 * N - 1 + 511) / 512, 512>>>(reconKernel, N, du, 1.0f, curvedDetector, sdd);
   } else if (kernelEnum == KERNEL_HAMMING) {
-    InitReconKernel_Hamming<<<(2 * N - 1 + 511) / 512, 512>>>(reconKernel, N, du, kernelParam);
+    InitReconKernel_Hamming<<<(2 * N - 1 + 511) / 512, 512>>>(reconKernel, N, du, kernelParam, curvedDetector, sdd);
   } else if (kernelEnum == KERNEL_GAUSSIAN_RAMP) {
-    InitReconKernel_GaussianApodized<<<(2 * N - 1 + 511) / 512, 512>>>(reconKernel, N, du,
-                                                                       kernelParam);
+    InitReconKernel_GaussianApodized<<<(2 * N - 1 + 511) / 512, 512>>>(reconKernel, N, du,kernelParam);
   } else if (kernelEnum == KERNEL_NONE) {
     // Do not need to do anything
   }
@@ -373,14 +418,15 @@ void Fbp_InitializeReconKernel_Agent(float *&reconKernel, const int N, const flo
 void FilterSinogram_Agent(float *sgm, int batchsize, float *reconKernel, float *u, int sgmWidth,
                           int sgmHeight, int views, float totalScanAngle, bool shortScan,
                           float *beta, float *sdd_array, int kernelEnum, float detEltSize,
-                          float *offcenter_array, float *sgm_flt) {
+                          bool curvedDetector, float sdd, float *offcenter_array, float *sgm_flt) {
   // Step 1: weight the sinogram
   dim3 grid((sgmWidth + 15) / 16, (sgmHeight + 15) / 16, batchsize);
   dim3 block(16, 16, 1);
 
   // Common attenuation imaging
   WeightSinogram_device<<<grid, block>>>(sgm, u, sgmWidth, sgmHeight, views, sdd_array,
-                                         totalScanAngle, shortScan, beta, offcenter_array);
+                                         totalScanAngle, shortScan, beta, offcenter_array, 
+                                         curvedDetector);
 
   cudaDeviceSynchronize();
 
@@ -392,7 +438,7 @@ void FilterSinogram_Agent(float *sgm, int batchsize, float *reconKernel, float *
     float *reconKernel_ramp;
     cudaMalloc(&reconKernel_ramp, (2 * sgmWidth - 1) * sizeof(float));
     InitReconKernel_Hamming<<<(2 * sgmWidth - 1 + 511) / 512, 512>>>(reconKernel_ramp, sgmWidth, du,
-                                                                     1);
+                                                                     1, curvedDetector, sdd);
     cudaDeviceSynchronize();
 
     // intermidiate filtration result is saved in sgm_flt_ramp
@@ -422,15 +468,16 @@ void FilterSinogram_Agent(float *sgm, int batchsize, float *reconKernel, float *
 void BackprojectPixelDriven_Agent(float *sgm_flt, int batchsize, float *sdd_array, float *sid_array,
                                   float *offcenter_array, float *u, float *beta, int imgDim,
                                   bool shortScan, int sgmWidth, int views, float imgPixelSize,
-                                  float xCenter, float yCenter, bool pmatrixFlag, float* pmatrix_array, 
-                                  float pmatrix_eltsize, float imgRot, float *img) {
+                                  float xCenter, float yCenter, bool curvedDetector, 
+                                  bool pmatrixFlag, float* pmatrix_array, float pmatrix_eltsize, 
+                                  float imgRot, float *img) {
   dim3 grid((imgDim + 15) / 16, (imgDim + 15) / 16, batchsize);
   dim3 block(16, 16, 1);
 
   if (pmatrixFlag == false)  // if pmatrix is not applied
     BackprojectPixelDriven_device<<<grid, block>>>(sgm_flt, u, beta, shortScan, sgmWidth, views,
                                                    imgDim, sdd_array, sid_array, offcenter_array,
-                                                   imgPixelSize, xCenter, yCenter, img);
+                                                   imgPixelSize, xCenter, yCenter, curvedDetector, img);
   else  // if pmatrix is applied
     BackprojectPixelDriven_pmatrix_device<<<grid, block>>>(sgm_flt, u, beta, pmatrix_array, pmatrix_eltsize, 
                                                            shortScan, sgmWidth, views, imgDim, sdd_array, 
@@ -468,15 +515,16 @@ void Fbp_FreeMemory_Agent(float *&p) {
 /**
  * This is the very main.
  */
-void mandoCudaFbp(float *sgm, int batchsize, int sgmHeight, int sgmWidth, int views,
-                  int reconKernelEnum, float reconKernelParam, float totalScanAngle,
-                  float detElementSize, float detOffcenter, float sid, float sdd, int imgDim,
-                  float imgPixelSize, float imgRot, float imgXCenter, float imgYCenter,
+void mandoCudaFbp(float *sgm, int batchsize, int sgmHeight, int sgmWidth, int views, int reconKernelEnum, 
+                  float reconKernelParam, float totalScanAngle, float detElementSize, float detOffcenter, 
+                  float sid, float sdd, int imgDim, float imgPixelSize, float imgRot, 
+                  float imgXCenter, float imgYCenter, bool curvedDetector, bool fovCrop,
                   bool pmatrixFlag, float *pmatrix_array, float pmatrix_eltsize, 
-                  bool nonuniformSID, float *sid_array, bool nonuniformSDD, float *sdd_array,
+                  bool nonuniformSID, float *sid_array, 
+                  bool nonuniformSDD, float *sdd_array,
                   bool nonuniformScanAngle, float *scan_angle_array,
                   bool nonuniformOffCenter, float *offcenter_array, 
-                  bool fovCrop, float *img) {
+                  float *img) {
   const unsigned int SgmBytes = batchsize * sgmWidth * sgmHeight * sizeof(float);
   const unsigned int ImgBytes = batchsize * imgDim * imgDim * sizeof(float);
   const unsigned int PmatrixBytes = 12 * views * sizeof(float);
@@ -532,7 +580,8 @@ void mandoCudaFbp(float *sgm, int batchsize, int sgmHeight, int sgmWidth, int vi
   Fbp_InitializeU_Agent(u, sgmWidth, detElementSize, detOffcenter);
   bool shortScan = 360.0f > abs(totalScanAngle);
   float *reconKernel = nullptr;
-  Fbp_InitializeReconKernel_Agent(reconKernel, sgmWidth, detElementSize, reconKernelEnum, reconKernelParam);
+  Fbp_InitializeReconKernel_Agent(reconKernel, sgmWidth, detElementSize, reconKernelEnum, reconKernelParam, 
+                                  curvedDetector, sdd);
   // Make sure parameters are correct
   cudaCheckError();
 
@@ -547,12 +596,12 @@ void mandoCudaFbp(float *sgm, int batchsize, int sgmHeight, int sgmWidth, int vi
   // Filter the sinogram.
   FilterSinogram_Agent(sgm_device, batchsize, reconKernel, u, sgmWidth, sgmHeight, views,
                        totalScanAngle, shortScan, beta, sddArray, reconKernelEnum, detElementSize,
-                       offcenterArray, filtered_sgm);
+                       curvedDetector, sdd, offcenterArray, filtered_sgm);
   cudaCheckError();
 
   BackprojectPixelDriven_Agent(filtered_sgm, batchsize, sddArray, sidArray, offcenterArray, u, beta,
-                               imgDim, shortScan, sgmWidth, views, imgPixelSize, imgXCenter,
-                               imgYCenter, pmatrixFlag, pmatrix_array_device, pmatrix_eltsize, imgRot, img_device);
+                               imgDim, shortScan, sgmWidth, views, imgPixelSize, imgXCenter, imgYCenter,
+                               curvedDetector, pmatrixFlag, pmatrix_array_device, pmatrix_eltsize, imgRot, img_device);
   cudaCheckError();
 
   if (fovCrop) {
