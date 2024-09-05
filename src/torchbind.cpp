@@ -15,7 +15,7 @@ torch::Tensor fanbeam_fpj(torch::Tensor x, float sid, float sdd, int views,
                           int detElementCount, float detEleSize, 
                           int imgDim, float imgPixelSize, 
                           float startAngle, float totalScanAngle, 
-                          float offcenter, float imgXCenter, float imgYCenter
+                          float offcenter, float imgXCenter, float imgYCenter,
                           float fpjStepSize, int oversample, bool curvedDetector,
                           bool pmatrixFlag, torch::Tensor pmatrix_array, float pmatrix_eltsize, 
                           bool nonuniformSID, torch::Tensor sid_array, 
